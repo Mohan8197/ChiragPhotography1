@@ -1,12 +1,13 @@
-
 import { ImageResponse } from "next/og";
-import { studio } from "@/data/site";
 
-export const alt = `${studio.name} — ${studio.tagline}`;
-export const size = { width: 1200, height: 630 };
+export const alt = "Chirag Photography - Bengaluru";
+export const size = {
+  width: 1200,
+  height: 630,
+};
 export const contentType = "image/png";
 
-export default async function OpengraphImage() {
+export default function OpenGraphImage() {
   return new ImageResponse(
     (
       <div
@@ -15,20 +16,16 @@ export default async function OpengraphImage() {
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          justifyContent: "flex-end",
-          padding: 64,
-          color: "#F4F1EC",
-          background: "#141413",
+          justifyContent: "center",
+          alignItems: "center",
+          background: "#171512",
+          color: "#ffffff",
+          fontSize: 76,
         }}
       >
-        <div style={{ fontSize: 22, letterSpacing: 6 }}>
-          Wedding &amp; event photography — Bengaluru
-        </div>
-        <div style={{ fontSize: 120, marginTop: 16 }}>
-          {studio.shortName}
-        </div>
-        <div style={{ fontSize: 34, marginTop: 12 }}>
-          {studio.tagline}
+        <div>CHIRAG PHOTOGRAPHY</div>
+        <div style={{ fontSize: 30, marginTop: 24 }}>
+          Weddings • Birthdays • Events • Bengaluru
         </div>
       </div>
     ),
