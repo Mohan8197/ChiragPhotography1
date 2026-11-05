@@ -1,0 +1,38 @@
+import { ImageResponse } from "next/og";
+import { heroSlides } from "@/data/projects";
+import { studio } from "@/data/site";
+
+export const alt = `${studio.name} — ${studio.tagline}`;
+export const size = { width: 1200, height: 630 };
+export const contentType = "image/png";
+
+export default async function OpengraphImage() {
+  const bg = `${heroSlides[0].photo.src}?auto=format&fit=crop&w=1200&h=630&q=70&fm=jpg`;
+  return new ImageResponse(
+    (
+      <div style={{ width: "100%", height: "100%", display: "flex", position: "relative", background: "#141413" }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={bg} alt="" width={1200} height={630} style={{ position: "absolute", inset: 0, objectFit: "cover" }} />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "flex-end",
+            padding: 64,
+            color: "#F4F1EC",
+            background: "linear-gradient(180deg, rgba(0,0,0,0.05) 30%, rgba(0,0,0,0.65) 100%)",
+          }}
+        >
+          <div style={{ fontSize: 22, letterSpacing: 6, textTransform: "uppercase" }}>
+            Wedding &amp; event photography — Bengaluru
+          </div>
+          <div style={{ fontSize: 120, lineHeight: 1, marginTop: 16, fontFamily: "serif" }}>{studio.shortName}</div>
+          <div style={{ fontSize: 34, marginTop: 12, fontStyle: "italic", fontFamily: "serif" }}>{studio.tagline}</div>
+        </div>
+      </div>
+    ),
+    size,
+  );
+}

@@ -1,0 +1,698 @@
+@import "tailwindcss";
+@import "lenis/dist/lenis.css";
+
+/* ================================================================== */
+/*  Design tokens                                                      */
+/* ================================================================== */
+
+@theme {
+  /* Base palette */
+  --color-paper: #f4f1ec;
+  --color-bone: #ebe6dd;
+  --color-ink: #1a1a18;
+  --color-stone: #8a857d; /* large type & decoration only (3.3:1 on paper) */
+  --color-stone-deep: #6b665e; /* small secondary text (5:1 on paper) */
+  --color-champagne: #b89b72;
+  --color-charcoal: #141413;
+  --color-charcoal-soft: #1d1d1b;
+
+  /* Category accents */
+  --color-rose: #c9a39a;
+  --color-coral: #e8a598;
+  --color-gold: #c8a04a;
+  --color-sage: #c9d6c3;
+  --color-slate: #5e6670;
+
+  /* Type */
+  --font-serif: var(--font-instrument), "Times New Roman", Georgia, serif;
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+
+  --text-mega: clamp(4.5rem, 18.6vw, 23rem);
+  --text-mega--line-height: 0.82;
+  --text-mega--letter-spacing: -0.035em;
+  --text-display: clamp(3.25rem, 10.5vw, 11.5rem);
+  --text-display--line-height: 0.88;
+  --text-display--letter-spacing: -0.03em;
+  --text-h1: clamp(2.75rem, 7vw, 7.5rem);
+  --text-h1--line-height: 0.92;
+  --text-h1--letter-spacing: -0.025em;
+  --text-h2: clamp(2.25rem, 5vw, 5.25rem);
+  --text-h2--line-height: 0.95;
+  --text-h2--letter-spacing: -0.02em;
+  --text-h3: clamp(1.75rem, 2.8vw, 3rem);
+  --text-h3--line-height: 1.05;
+  --text-lead: clamp(1.75rem, 3.5vw, 3.5rem);
+  --text-lead--line-height: 1.12;
+  --text-lead--letter-spacing: -0.01em;
+  --text-quote: clamp(1.875rem, 3.9vw, 4.25rem);
+  --text-quote--line-height: 1.08;
+
+  /* Motion */
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-3: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --ease-in-out-expo: cubic-bezier(0.87, 0, 0.13, 1);
+
+  --breakpoint-3xl: 120rem;
+}
+
+:root {
+  /* 8px rhythm: gutters & gaps snap between 16px and 48px */
+  --gutter: clamp(1rem, 3.2vw, 3rem);
+  --col-gap: clamp(1rem, 1.6vw, 1.5rem);
+  /* Project pages override these with their category accent */
+  --accent: var(--color-champagne);
+  --accent-ink: #7d6646;
+}
+
+/* ================================================================== */
+/*  Base                                                               */
+/* ================================================================== */
+
+@layer base {
+  html {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html.is-loading {
+    overflow: hidden;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.6;
+    overflow-x: clip;
+  }
+
+  ::selection {
+    background-color: var(--color-champagne);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 1px solid currentColor;
+    outline-offset: 4px;
+  }
+
+  img {
+    -webkit-user-drag: none;
+  }
+
+  button {
+    cursor: pointer;
+  }
+}
+
+/* ================================================================== */
+/*  Utilities                                                          */
+/* ================================================================== */
+
+@utility label {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+@utility container-x {
+  padding-inline: var(--gutter);
+}
+
+@utility grid-12 {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--col-gap);
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ================================================================== */
+/*  Components                                                         */
+/* ================================================================== */
+
+@layer components {
+  /* Hover underline that wipes in with the current accent */
+  .u-link {
+    position: relative;
+    display: inline-block;
+  }
+  .u-link::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -0.15em;
+    height: 1px;
+    background-color: var(--accent);
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 0.7s var(--ease-expo);
+  }
+  .u-link:hover::after,
+  .u-link:focus-visible::after,
+  .u-link[aria-current="page"]::after {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+
+  /* SplitText line masks — breathing room so italic overhangs aren't clipped */
+  .split-line-mask {
+    padding: 0 0.1em 0.12em;
+    margin: 0 -0.1em -0.12em;
+  }
+
+  /* Film grain */
+  .grain {
+    position: fixed;
+    inset: -8rem;
+    z-index: 90;
+    pointer-events: none;
+    opacity: 0.05;
+    /* Pre-rendered noise tile — far cheaper to rasterise than an SVG feTurbulence filter */
+    background-image: url("/grain.png");
+    background-size: 128px;
+    animation: grain 1.2s steps(6) infinite;
+    will-change: transform;
+  }
+
+  @keyframes grain {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+    17% {
+      transform: translate3d(-3rem, 2rem, 0);
+    }
+    33% {
+      transform: translate3d(2rem, -4rem, 0);
+    }
+    50% {
+      transform: translate3d(-4rem, -1rem, 0);
+    }
+    67% {
+      transform: translate3d(4rem, 3rem, 0);
+    }
+    83% {
+      transform: translate3d(-1rem, 4rem, 0);
+    }
+  }
+
+  @keyframes hero-progress {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes scroll-cue {
+    from {
+      transform: translateY(-100%);
+    }
+    to {
+      transform: translateY(200%);
+    }
+  }
+
+  /* Preloader — runs in CSS from first paint, so it never waits on hydration */
+  .pre-line {
+    animation: pre-in 0.9s var(--ease-expo) backwards;
+  }
+  .pre-count {
+    counter-reset: pre var(--pre);
+    animation: pre-count 1.3s var(--ease-out-3) forwards;
+  }
+  .pre-count::after {
+    content: counter(pre, decimal-leading-zero);
+  }
+  .pre-bar {
+    transform-origin: left;
+    animation: pre-bar 1.3s var(--ease-out-3) forwards;
+  }
+
+  @keyframes pre-in {
+    from {
+      transform: translateY(110%);
+    }
+  }
+  @keyframes pre-count {
+    to {
+      --pre: 100;
+    }
+  }
+  @keyframes pre-bar {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  /* Custom cursor */
+  html.has-cursor,
+  html.has-cursor * {
+    cursor: none !important;
+  }
+  html.has-cursor :is(input, textarea, select) {
+    cursor: auto !important;
+  }
+  .cursor-dot,
+  .cursor-ring {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 120;
+    pointer-events: none;
+    border-radius: 9999px;
+  }
+  .cursor-dot {
+    width: 10px;
+    height: 10px;
+    margin: -5px 0 0 -5px;
+    background-color: #fff;
+    mix-blend-mode: difference;
+  }
+  .cursor-ring {
+    display: grid;
+    place-items: center;
+    width: 104px;
+    height: 104px;
+    margin: -52px 0 0 -52px;
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    transform: scale(0);
+  }
+
+  /* Page transition curtain */
+  .curtain {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: grid;
+    place-items: center;
+    background-color: var(--color-charcoal);
+    color: var(--color-paper);
+    visibility: hidden;
+    clip-path: inset(100% 0% 0% 0%);
+  }
+
+  /* Header colour follows the section beneath it */
+  .site-header {
+    color: var(--color-ink);
+    transition: color 0.5s var(--ease-out-3);
+  }
+  .site-header[data-on="dark"] {
+    color: var(--color-paper);
+  }
+
+  /* Animated-underline form fields */
+  .field {
+    position: relative;
+    border-bottom: 1px solid rgb(244 241 236 / 0.22);
+  }
+  .field::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 1px;
+    background-color: var(--color-champagne);
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 0.8s var(--ease-expo);
+  }
+  .field:focus-within::after,
+  .field[data-invalid]::after {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  .field[data-invalid]::after {
+    background-color: #e7957f;
+  }
+}
+
+/* ================================================================== */
+/*  Filterable gallery                                                 */
+/*  Theme colours are registered so they interpolate when a filter     */
+/*  changes; layouts are driven by [data-layout] on the list.          */
+/* ================================================================== */
+
+@property --pre {
+  syntax: "<integer>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --g-bg {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #f4f1ec;
+}
+@property --g-ink {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #1a1a18;
+}
+@property --g-muted {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #6b665e;
+}
+@property --g-accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #b89b72;
+}
+@property --g-accent-ink {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #7d6646;
+}
+
+@layer components {
+  .gallery-theme {
+    --accent: var(--g-accent);
+    background-color: var(--g-bg);
+    color: var(--g-ink);
+    transition:
+      --g-bg 1.2s var(--ease-in-out-expo),
+      --g-ink 1.2s var(--ease-in-out-expo),
+      --g-muted 1.2s var(--ease-in-out-expo),
+      --g-accent 1.2s var(--ease-in-out-expo),
+      --g-accent-ink 1.2s var(--ease-in-out-expo);
+  }
+
+  .g-item[data-hidden] {
+    display: none;
+  }
+
+  .g-figure {
+    position: relative;
+    transition:
+      transform 0.9s var(--ease-expo),
+      padding 0.9s var(--ease-expo),
+      background-color 0.9s var(--ease-expo),
+      box-shadow 0.9s var(--ease-expo);
+  }
+
+  .g-frame {
+    position: relative;
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    aspect-ratio: var(--ar);
+    background-color: color-mix(in srgb, var(--g-ink) 7%, transparent);
+    transition: border-radius 0.9s var(--ease-expo);
+  }
+
+  .g-parallax {
+    position: absolute;
+    inset: -8% 0;
+  }
+
+  .g-media {
+    position: absolute;
+    inset: 0;
+    transition: transform 1.4s var(--ease-expo);
+  }
+  .g-frame:hover .g-media,
+  .g-frame:focus-visible .g-media {
+    transform: scale(1.04);
+  }
+
+  .g-caption {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.75rem;
+    width: 0;
+    min-width: 100%;
+    padding-top: 0.875rem;
+  }
+  .g-index {
+    font-size: 0.6875rem;
+    letter-spacing: 0.14em;
+    color: var(--g-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .g-title {
+    font-family: var(--font-serif);
+    font-size: 1.375rem;
+    line-height: 1.1;
+  }
+  .g-meta {
+    margin-left: auto;
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--g-muted);
+  }
+  .g-moment {
+    display: none;
+  }
+
+  /* ---- Weddings: serif captions, champagne detail -------------------- */
+  [data-layout="weddings"] .g-caption {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.375rem;
+    padding-top: 1.25rem;
+  }
+  [data-layout="weddings"] .g-title {
+    font-style: italic;
+    font-size: clamp(1.5rem, 2vw, 2rem);
+  }
+  [data-layout="weddings"] .g-meta {
+    margin-left: 0;
+    color: var(--g-accent-ink);
+  }
+  [data-layout="weddings"] .g-index {
+    display: none;
+  }
+  [data-layout="weddings"] .g-moment {
+    display: block;
+    font-size: 0.9375rem;
+    color: var(--g-muted);
+  }
+
+  /* ---- Engagements: centred, soft ------------------------------------ */
+  [data-layout="engagements"] .g-frame {
+    border-radius: 0.25rem;
+  }
+  [data-layout="engagements"] .g-caption {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.375rem;
+    padding-top: 1.5rem;
+  }
+  [data-layout="engagements"] .g-title {
+    font-style: italic;
+    font-size: 1.5rem;
+  }
+  [data-layout="engagements"] .g-meta {
+    margin-left: 0;
+  }
+  [data-layout="engagements"] .g-index {
+    display: none;
+  }
+
+  /* ---- Birthdays: bento, rounded, polaroids ---------------------------- */
+  [data-layout="birthdays"] .g-figure,
+  [data-layout="birthdays"] .g-frame {
+    height: 100%;
+  }
+  [data-layout="birthdays"] .g-frame {
+    aspect-ratio: auto;
+    border-radius: 1.25rem;
+  }
+  [data-layout="birthdays"] .g-caption {
+    position: absolute;
+    left: 0.75rem;
+    bottom: 0.75rem;
+    width: auto;
+    min-width: 0;
+    max-width: calc(100% - 1.5rem);
+    padding: 0.375rem 0.875rem;
+    border-radius: 9999px;
+    background-color: var(--g-bg);
+  }
+  [data-layout="birthdays"] .g-title {
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--g-accent-ink);
+  }
+  [data-layout="birthdays"] :is(.g-meta, .g-index) {
+    display: none;
+  }
+  [data-layout="birthdays"] [data-variant="polaroid"] .g-figure {
+    padding: 0.625rem 0.625rem 2.75rem;
+    border-radius: 0.25rem;
+    background-color: #fffdf9;
+    box-shadow: 0 1.5rem 3rem -1.5rem rgb(33 26 23 / 0.35);
+    transform: rotate(var(--tilt, 0deg));
+  }
+  [data-layout="birthdays"] [data-variant="polaroid"] .g-frame {
+    border-radius: 0.125rem;
+  }
+  [data-layout="birthdays"] [data-variant="polaroid"] .g-caption {
+    bottom: 0.625rem;
+    left: 0.875rem;
+    padding: 0;
+    background: none;
+  }
+  [data-layout="birthdays"] [data-variant="polaroid"] .g-title {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 1.125rem;
+    color: #211a17;
+  }
+
+  /* ---- Parties: dark film strip ------------------------------------- */
+  [data-layout="parties"] {
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14'%3E%3Crect x='8' y='3' width='12' height='8' rx='2' fill='%23F4F1EC' fill-opacity='0.14'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14'%3E%3Crect x='8' y='3' width='12' height='8' rx='2' fill='%23F4F1EC' fill-opacity='0.14'/%3E%3C/svg%3E");
+    background-repeat: repeat-x;
+    background-position:
+      0 0.75rem,
+      0 calc(100% - 0.75rem);
+    background-size: 28px 14px;
+    background-attachment: local;
+    overscroll-behavior-x: contain;
+  }
+  [data-layout="parties"] .g-frame {
+    height: clamp(17rem, 54vh, 38rem);
+    width: auto;
+    max-width: 80vw;
+    border-radius: 0.125rem;
+  }
+  [data-layout="parties"] .g-media img {
+    filter: contrast(1.08) saturate(1.06);
+  }
+  [data-layout="parties"] .g-caption {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  [data-layout="parties"] .g-index {
+    color: var(--g-accent-ink);
+    font-weight: 600;
+  }
+  [data-layout="parties"] .g-title {
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  [data-layout="parties"] .g-meta {
+    margin-left: 0;
+  }
+
+  /* ---- Baby showers: airy, soft corners, sage --------------------------- */
+  [data-layout="baby-showers"] .g-frame {
+    border-radius: 0.5rem;
+  }
+  [data-layout="baby-showers"] .g-caption {
+    gap: 0.25rem 0.5rem;
+  }
+  [data-layout="baby-showers"] .g-title {
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+  [data-layout="baby-showers"] .g-title::before {
+    content: "";
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-right: 0.5rem;
+    border-radius: 9999px;
+    background-color: var(--g-accent);
+    vertical-align: 0.1em;
+  }
+  [data-layout="baby-showers"] .g-index {
+    display: none;
+  }
+  [data-layout="baby-showers"] .g-meta {
+    margin-left: 0;
+    flex-basis: 100%;
+    padding-left: 1rem;
+  }
+
+  /* ---- Corporate: uniform, sharp, minimal --------------------------- */
+  [data-layout="corporate"] .g-frame {
+    border-radius: 0;
+  }
+  [data-layout="corporate"] .g-caption {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.125rem;
+    padding-top: 0.75rem;
+  }
+  [data-layout="corporate"] .g-title {
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  [data-layout="corporate"] .g-index {
+    display: none;
+  }
+  [data-layout="corporate"] .g-meta {
+    margin-left: 0;
+    letter-spacing: 0.12em;
+  }
+}
+
+/* ================================================================== */
+/*  Reduced motion                                                     */
+/* ================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .grain {
+    animation: none;
+  }
+}
+
+/* Chirag Photography branding watermark — original source files remain untouched. */
+.g-frame::after,
+[data-story-frame] button::after {
+  content: "CHIRAG PHOTOGRAPHY";
+  position: absolute;
+  right: 0.8rem;
+  bottom: 0.75rem;
+  z-index: 3;
+  color: rgb(255 255 255 / 0.88);
+  font-family: var(--font-sans);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-shadow: 0 1px 5px rgb(0 0 0 / 0.75);
+  pointer-events: none;
+}
