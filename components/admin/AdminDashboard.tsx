@@ -94,6 +94,7 @@ export function AdminDashboard() {
             </div>
           </div>
 
+          {active === "Overview" ? (
           <div className="mb-8 grid grid-cols-2 gap-3 xl:grid-cols-4">
             {[
               ["Active projects", String(projects.filter(p => p.status !== "Enquiry").length).padStart(2, "0"), "Across current bookings"],
@@ -145,6 +146,22 @@ export function AdminDashboard() {
             </div>
           </div>
           <div className="mt-8 flex flex-wrap justify-between gap-2 border-t border-[#e4ded4] pt-4 text-[9px] uppercase tracking-[.14em] text-[#a0998e]"><span>Chirag Photography · Bengaluru</span><span>Management workspace · Preview build</span></div>
+          ) : (
+            <section className="min-h-[520px] border border-[#e6e1d8] bg-[#fbfaf7] p-6 sm:p-8">
+              <div className="text-[9px] uppercase tracking-[.2em] text-[#9b8a70]">Chirag Photography / {active}</div>
+              <h2 className="mt-3 font-serif text-[30px]"> {active} </h2>
+              <p className="mt-2 max-w-2xl text-[12px] leading-6 text-[#827c72]">This section now has its own workspace view. It is currently a layout preview with sample information; database saving, user login and role permissions are the next implementation steps.</p>
+              <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {[
+                  ["Workspace", active === "Customers" ? "Customer profiles and contact details" : active === "Projects & events" ? "Bookings, event details and delivery status" : active === "Enquiries" ? "New enquiries and follow-up status" : active === "Quotations" ? "Packages, estimates and quotation status" : active === "Payments" ? "Advances, instalments and outstanding balances" : active === "Team & assignments" ? "Photographer profiles and event assignments" : active === "Calendar" ? "Upcoming shoots, dates and reporting times" : active === "Galleries" ? "Private event albums and delivery status" : active === "Reports" ? "Business performance and project summaries" : "Studio preferences and access controls"],
+                  ["Quick actions", "Add, review and update records will be enabled in the next build"],
+                  ["Data status", "Preview only · No live customer or financial records are connected"]
+                ].map(([label, value]) => <div key={label} className="border border-[#e6e1d8] bg-white p-5"><div className="text-[9px] font-semibold uppercase tracking-[.16em] text-[#91897e]">{label}</div><p className="mt-3 font-serif text-[19px] leading-snug">{value}</p></div>)}
+              </div>
+              <div className="mt-8 border-t border-[#e9e4dc] pt-5 text-[11px] text-[#8b8479]">Use the left menu to switch between workspace sections. Each menu item now opens a distinct section view.</div>
+            </section>
+          )}
+
         </main>
       </div>
 
