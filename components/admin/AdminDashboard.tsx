@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Customer = {
@@ -114,6 +115,7 @@ const buttonClass =
   "bg-[#292a25] px-4 py-3 text-xs font-semibold uppercase tracking-wider text-white disabled:opacity-50";
 
 export function AdminDashboard() {
+  const router = useRouter();
   const [active, setActive] = useState("Overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -595,8 +597,20 @@ export function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#f6f4ef] text-[#22231f]">
-      <header className="border-b border-[#e6e1d8] bg-[#fbfaf7] px-5 py-3 text-center text-[10px] font-semibold uppercase tracking-[.22em] text-[#8b7658]">
-        Chirag Photography · Studio Management
+      <header className="flex items-center justify-between border-b border-[#e6e1d8] bg-[#fbfaf7] px-5 py-3">
+        <div className="text-[10px] font-semibold uppercase tracking-[.22em] text-[#8b7658]">
+          Chirag Photography · Studio Management
+        </div>
+        <button
+          type="button"
+          onClick={async () => {
+            await supabase.auth.signOut();
+            router.replace("/admin/login");
+          }}
+          className="border border-[#d8cdbb] px-4 py-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#625f58] transition hover:bg-[#292a25] hover:text-white"
+        >
+          Log out
+        </button>
       </header>
 
       <div className="mx-auto flex max-w-[1600px]">
