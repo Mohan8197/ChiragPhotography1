@@ -118,6 +118,8 @@ export function AdminDashboard() {
   const router = useRouter();
   const [active, setActive] = useState("Overview");
   const [loading, setLoading] = useState(true);
+  const [accessChecking, setAccessChecking] = useState(true);
+  const [accessMessage, setAccessMessage] = useState("");
   const [error, setError] = useState("");
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -277,8 +279,43 @@ export function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    let active = true;
+
+    async function verifyAdminAccess() {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !userData.user) {
+        router.replace("/admin/login");
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", userData.user.id)
+        .maybeSingle();
+
+      if (profileError || !profile || !["owner", "admin"].includes(profile.role)) {
+        await supabase.auth.signOut();
+        if (active) {
+          setAccessMessage("This account is not authorised to access the studio dashboard.");
+          setAccessChecking(false);
+        }
+        return;
+      }
+
+      if (active) {
+        setAccessChecking(false);
+        loadData();
+      }
+    }
+
+    verifyAdminAccess();
+
+    return () => {
+      active = false;
+    };
+  }, [loadData, router]);
 
   const receivedByProject = useMemo(() => {
     const map = new Map<string, number>();
@@ -594,6 +631,30 @@ export function AdminDashboard() {
 
   const pageTitle =
     active === "Overview" ? "Studio Dashboard" : active;
+
+  if (accessChecking) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#f6f4ef] text-sm text-[#625f58]">
+        Checking your studio access...
+      </main>
+    );
+  }
+
+  if (accessMessage) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#f6f4ef] px-6 text-center text-[#292a25]">
+        <h1 className="font-serif text-3xl">Access restricted</h1>
+        <p className="max-w-md text-sm text-[#625f58]">{accessMessage}</p>
+        <button
+          type="button"
+          onClick={() => router.replace("/admin/login")}
+          className="bg-[#292a25] px-5 py-3 text-xs font-semibold uppercase tracking-wider text-white"
+        >
+          Return to login
+        </button>
+      </main>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f6f4ef] text-[#22231f]">
