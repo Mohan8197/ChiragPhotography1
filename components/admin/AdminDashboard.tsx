@@ -13,6 +13,14 @@ type Project = {
   paid: number;
   status: "Confirmed" | "Enquiry" | "Editing";
 };
+type Customer = {
+  id: string;
+  full_name: string;
+  mobile: string;
+  email: string | null;
+  address: string | null;
+  notes: string | null;
+};
 
 const initialProjects: Project[] = [
   { id: "CP-026", client: "Ananya & Rahul", event: "Wedding", date: "08 Nov 2026", venue: "The Tamarind Tree, Bengaluru", amount: 185000, paid: 75000, status: "Confirmed" },
@@ -39,6 +47,9 @@ const nav = [
 
 export function AdminDashboard() {
   const [active, setActive] = useState("Overview");
+  const [customers, setCustomers] = useState<Customer[]>([]);
+const [customerLoading, setCustomerLoading] = useState(true);
+const [customerError, setCustomerError] = useState("");
   const [query, setQuery] = useState("");
   const [projects, setProjects] = useState(initialProjects);
   const [showNew, setShowNew] = useState(false);
@@ -46,6 +57,24 @@ export function AdminDashboard() {
   const [event, setEvent] = useState("Wedding");
   const [date, setDate] = useState("");
   const [amount, setAmount] = useState("");
+  useEffect(() => {
+  async function loadCustomers() {
+    const { data, error } = await supabase
+      .from("customers")
+      .select("id, full_name, mobile, email, address, notes")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setCustomerError(error.message);
+    } else {
+      setCustomers(data ?? []);
+    }
+
+    setCustomerLoading(false);
+  }
+
+  loadCustomers();
+}, []);
 
   const filtered = useMemo(() => projects.filter((p) => [p.id, p.client, p.event, p.venue].join(" ").toLowerCase().includes(query.toLowerCase())), [projects, query]);
 
