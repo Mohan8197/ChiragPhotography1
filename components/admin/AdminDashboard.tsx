@@ -178,7 +178,53 @@ const [customerError, setCustomerError] = useState("");
           </div>
           <div className="mt-8 flex flex-wrap justify-between gap-2 border-t border-[#e4ded4] pt-4 text-[9px] uppercase tracking-[.14em] text-[#a0998e]"><span>Chirag Photography · Bengaluru</span><span>Management workspace · Preview build</span></div>
           </>
-        ) : (  
+        ) : active === "Customers" ? (
+      <section className="min-h-[520px] border border-[#e6e1d8] bg-white p-6 sm:p-8">
+  <div className="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h2 className="font-serif text-2xl">Customer Records</h2>
+      <p className="mt-1 text-sm text-[#827c72]">
+        Manage your photography studio customers.
+      </p>
+    </div>
+    <div className="text-sm text-[#827c72]">
+      Total Customers: {customers.length}
+    </div>
+  </div>
+
+  {customerLoading ? (
+    <p className="mt-6 text-sm">Loading customers...</p>
+  ) : customerError ? (
+    <p className="mt-6 text-sm text-red-600">
+      Error: {customerError}
+    </p>
+  ) : customers.length === 0 ? (
+    <p className="mt-6 text-sm text-[#827c72]">
+      No customers added yet.
+    </p>
+  ) : (
+    <div className="mt-6 overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead>
+          <tr className="border-b text-[#827c72]">
+            <th className="p-3">Name</th>
+            <th className="p-3">Mobile</th>
+            <th className="p-3">Email</th>
+          </tr>
+        </thead>
+        <tbody>
+          {customers.map((customer) => (
+            <tr key={customer.id} className="border-b">
+              <td className="p-3 font-medium">{customer.full_name}</td>
+              <td className="p-3">{customer.mobile}</td>
+              <td className="p-3">{customer.email || "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+</section>
             <section className="min-h-[520px] border border-[#e6e1d8] bg-[#fbfaf7] p-6 sm:p-8">
               <div className="text-[9px] uppercase tracking-[.2em] text-[#9b8a70]">Chirag Photography / {active}</div>
               <h2 className="mt-3 font-serif text-[30px]"> {active} </h2>
