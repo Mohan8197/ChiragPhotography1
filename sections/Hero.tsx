@@ -141,11 +141,7 @@ export function Hero({ slides }: { slides: HeroSlide[] }) {
       </div>
 
       <div data-hero-content className="relative z-10 flex h-full flex-col justify-end container-x pb-6 md:pb-10">
-        <p data-hero-fade className="label mb-6 max-w-xs md:mb-8">
-          Wedding & event photography
-          <br />
-          {studio.base} — {studio.reach}
-        </p>
+       
 
         <h1 className="font-serif text-mega">
           <span className="sr-only">{studio.name} — wedding and event photographer in Bengaluru</span>
