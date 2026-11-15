@@ -225,6 +225,7 @@ const [customerError, setCustomerError] = useState("");
     </div>
   )}
 </section>
+      ) : (
             <section className="min-h-[520px] border border-[#e6e1d8] bg-[#fbfaf7] p-6 sm:p-8">
               <div className="text-[9px] uppercase tracking-[.2em] text-[#9b8a70]">Chirag Photography / {active}</div>
               <h2 className="mt-3 font-serif text-[30px]"> {active} </h2>
