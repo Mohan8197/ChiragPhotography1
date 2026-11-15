@@ -67,6 +67,9 @@ export function Header() {
 
   const isActive = (href: string) => href === "/work" && pathname.startsWith("/work");
 
+  // Keep the public-site navigation off private admin pages.
+  if (pathname.startsWith("/admin")) return null;
+
   return (
     <>
       <header ref={headerRef} data-on={menuOpen ? "dark" : tone} className="site-header fixed inset-x-0 top-0 z-50">
