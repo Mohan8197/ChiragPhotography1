@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -84,6 +85,13 @@ export default function AdminLoginPage() {
         >
           {loading ? "Signing in..." : "Sign in"}
         </button>
+
+        <Link
+          href="/"
+          className="block pt-2 text-center text-sm text-[#8b7658] underline-offset-4 transition hover:text-black hover:underline"
+        >
+          ← Back to website
+        </Link>
       </form>
     </main>
   );
