@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -26,6 +25,16 @@ type BookingProject = {
   event_date?: string;
   venue?: string;
   reporting_time?: string;
+};
+
+type Payment = {
+  id: string;
+  project_id: string;
+  amount: number;
+  payment_method: string | null;
+  transaction_reference: string | null;
+  payment_date: string | null;
+  notes: string | null;
 };
 
 const money = (value: number) =>
@@ -85,6 +94,22 @@ export function AdminDashboard() {
   const [projectNotes, setProjectNotes] = useState("");
 
   const [query, setQuery] = useState("");
+
+  // Payment state
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentLoading, setPaymentLoading] = useState(true);
+  const [paymentError, setPaymentError] = useState("");
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [savingPayment, setSavingPayment] = useState(false);
+  const [paymentSearch, setPaymentSearch] = useState("");
+  const [paymentProjectId, setPaymentProjectId] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("UPI");
+  const [paymentReference, setPaymentReference] = useState("");
+  const [paymentDate, setPaymentDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+  const [paymentNotes, setPaymentNotes] = useState("");
 
   // Load customers and projects
   useEffect(() => {
@@ -152,6 +177,33 @@ export function AdminDashboard() {
     loadProjects();
   }, [customers.length === 0 ? "initial" : "loaded"]);
 
+  // Load payment history
+  useEffect(() => {
+    async function loadPayments() {
+      const { data, error } = await supabase
+        .from("payments")
+        .select(
+          "id, project_id, amount, payment_method, transaction_reference, payment_date, notes"
+        )
+        .order("payment_date", { ascending: false });
+
+      if (error) {
+        setPaymentError(error.message);
+      } else {
+        setPayments(
+          (data ?? []).map((payment) => ({
+            ...payment,
+            amount: Number(payment.amount ?? 0),
+          }))
+        );
+      }
+
+      setPaymentLoading(false);
+    }
+
+    loadPayments();
+  }, []);
+
   // Add customer
   async function addCustomer(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -196,7 +248,9 @@ export function AdminDashboard() {
     e.preventDefault();
 
     if (!selectedCustomer || !projectName.trim() || !eventDate) {
-      setProjectError("Please select a customer, enter a project name and event date.");
+      setProjectError(
+        "Please select a customer, enter a project name and event date."
+      );
       return;
     }
 
@@ -271,6 +325,138 @@ export function AdminDashboard() {
     setActive("Projects & events");
     setSavingProject(false);
   }
+
+  // Record a payment against a project
+  async function addPayment(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    const amount = Number(paymentAmount);
+
+    if (
+      !paymentProjectId ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      !paymentDate
+    ) {
+      setPaymentError(
+        "Select a booking, enter a valid amount and choose a payment date."
+      );
+      return;
+    }
+
+    const selectedProject = projects.find(
+      (project) => project.id === paymentProjectId
+    );
+
+    if (!selectedProject) {
+      setPaymentError(
+        "The selected booking could not be found. Refresh and try again."
+      );
+      return;
+    }
+
+    const alreadyReceived = payments
+      .filter((payment) => payment.project_id === paymentProjectId)
+      .reduce((sum, payment) => sum + payment.amount, 0);
+
+    const balance = selectedProject.total_amount - alreadyReceived;
+
+    if (amount > balance) {
+      setPaymentError(
+        `This amount is greater than the remaining balance of ${money(
+          Math.max(balance, 0)
+        )}.`
+      );
+      return;
+    }
+
+    setSavingPayment(true);
+    setPaymentError("");
+
+    const { data, error } = await supabase
+      .from("payments")
+      .insert({
+        project_id: paymentProjectId,
+        amount,
+        payment_method: paymentMethod,
+        transaction_reference: paymentReference.trim() || null,
+        payment_date: new Date(`${paymentDate}T12:00:00`).toISOString(),
+        notes: paymentNotes.trim() || null,
+      })
+      .select(
+        "id, project_id, amount, payment_method, transaction_reference, payment_date, notes"
+      )
+      .single();
+
+    if (error) {
+      setPaymentError(error.message);
+      setSavingPayment(false);
+      return;
+    }
+
+    setPayments((current) => [
+      { ...data, amount: Number(data.amount ?? 0) },
+      ...current,
+    ]);
+
+    setPaymentProjectId("");
+    setPaymentAmount("");
+    setPaymentMethod("UPI");
+    setPaymentReference("");
+    setPaymentDate(new Date().toISOString().slice(0, 10));
+    setPaymentNotes("");
+    setShowPaymentForm(false);
+    setSavingPayment(false);
+  }
+
+  const paymentTotals = useMemo(() => {
+    const receivedByProject = new Map<string, number>();
+
+    for (const payment of payments) {
+      receivedByProject.set(
+        payment.project_id,
+        (receivedByProject.get(payment.project_id) ?? 0) + payment.amount
+      );
+    }
+
+    const totalReceived = payments.reduce(
+      (sum, payment) => sum + payment.amount,
+      0
+    );
+
+    const totalBalance = projects.reduce(
+      (sum, project) =>
+        sum +
+        Math.max(
+          project.total_amount - (receivedByProject.get(project.id) ?? 0),
+          0
+        ),
+      0
+    );
+
+    return { receivedByProject, totalReceived, totalBalance };
+  }, [payments, projects]);
+
+  const filteredPayments = useMemo(() => {
+    const search = paymentSearch.toLowerCase();
+
+    return payments.filter((payment) => {
+      const project = projects.find(
+        (item) => item.id === payment.project_id
+      );
+
+      return [
+        project?.project_name ?? "",
+        project?.customer_name ?? "",
+        payment.payment_method ?? "",
+        payment.transaction_reference ?? "",
+        payment.notes ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(search);
+    });
+  }, [payments, projects, paymentSearch]);
 
   const filteredProjects = useMemo(() => {
     const search = projectSearch.toLowerCase();
@@ -374,6 +560,19 @@ export function AdminDashboard() {
                 className="rounded-sm bg-[#292a25] px-4 py-3 text-[10px] font-semibold uppercase tracking-[.12em] text-white"
               >
                 + New Booking
+              </button>
+            )}
+
+            {active === "Payments" && (
+              <button
+                onClick={() => {
+                  setPaymentError("");
+                  setShowPaymentForm(true);
+                }}
+                disabled={projects.length === 0}
+                className="rounded-sm bg-[#292a25] px-4 py-3 text-[10px] font-semibold uppercase tracking-[.12em] text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                + Record Payment
               </button>
             )}
 
@@ -584,7 +783,184 @@ export function AdminDashboard() {
             </section>
           )}
 
-          {!["Overview", "Customers", "Projects & events"].includes(active) && (
+          {active === "Payments" && (
+            <section className="min-h-[520px] border border-[#e6e1d8] bg-white p-6 sm:p-8">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-serif text-2xl">Payments & Balances</h2>
+                  <p className="mt-1 text-sm text-[#827c72]">
+                    Record customer payments and track outstanding booking balances.
+                  </p>
+                </div>
+                <div className="text-sm text-[#827c72]">
+                  {payments.length} payment{payments.length === 1 ? "" : "s"} recorded
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                <div className="border border-[#e6e1d8] bg-[#fbfaf7] p-5">
+                  <div className="text-[10px] uppercase tracking-wider text-[#91897e]">
+                    Total Booking Value
+                  </div>
+                  <div className="mt-3 font-serif text-2xl">
+                    {money(totalValue)}
+                  </div>
+                </div>
+
+                <div className="border border-[#e6e1d8] bg-[#fbfaf7] p-5">
+                  <div className="text-[10px] uppercase tracking-wider text-[#91897e]">
+                    Total Received
+                  </div>
+                  <div className="mt-3 font-serif text-2xl">
+                    {money(paymentTotals.totalReceived)}
+                  </div>
+                </div>
+
+                <div className="border border-[#e6e1d8] bg-[#fbfaf7] p-5">
+                  <div className="text-[10px] uppercase tracking-wider text-[#91897e]">
+                    Outstanding Balance
+                  </div>
+                  <div className="mt-3 font-serif text-2xl">
+                    {money(paymentTotals.totalBalance)}
+                  </div>
+                </div>
+              </div>
+
+              {paymentError && (
+                <p className="mt-4 text-sm text-red-600">{paymentError}</p>
+              )}
+
+              <h3 className="mt-8 font-serif text-xl">Booking balances</h3>
+
+              {projectLoading ? (
+                <p className="mt-4 text-sm text-[#827c72]">
+                  Loading bookings...
+                </p>
+              ) : projects.length === 0 ? (
+                <p className="mt-4 text-sm text-[#827c72]">
+                  Create a booking before recording a payment.
+                </p>
+              ) : (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full min-w-[650px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b text-[#827c72]">
+                        <th className="p-3">Project</th>
+                        <th className="p-3">Customer</th>
+                        <th className="p-3">Booking Amount</th>
+                        <th className="p-3">Received</th>
+                        <th className="p-3">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {projects.map((project) => {
+                        const received =
+                          paymentTotals.receivedByProject.get(project.id) ?? 0;
+                        const balance = Math.max(
+                          project.total_amount - received,
+                          0
+                        );
+
+                        return (
+                          <tr key={project.id} className="border-b">
+                            <td className="p-3 font-medium">
+                              {project.project_name}
+                            </td>
+                            <td className="p-3">
+                              {project.customer_name || "—"}
+                            </td>
+                            <td className="p-3">
+                              {money(project.total_amount)}
+                            </td>
+                            <td className="p-3">{money(received)}</td>
+                            <td className="p-3 font-medium">
+                              {money(balance)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="mt-9 flex flex-wrap items-center justify-between gap-3">
+                <h3 className="font-serif text-xl">Payment history</h3>
+                <input
+                  value={paymentSearch}
+                  onChange={(e) => setPaymentSearch(e.target.value)}
+                  placeholder="Search payments..."
+                  className="w-full border border-[#e1dbd1] px-3 py-3 text-sm sm:max-w-sm"
+                />
+              </div>
+
+              {paymentLoading ? (
+                <p className="mt-4 text-sm text-[#827c72]">
+                  Loading payments...
+                </p>
+              ) : filteredPayments.length === 0 ? (
+                <p className="mt-4 text-sm text-[#827c72]">
+                  No payments found yet.
+                </p>
+              ) : (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full min-w-[700px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b text-[#827c72]">
+                        <th className="p-3">Date</th>
+                        <th className="p-3">Project</th>
+                        <th className="p-3">Customer</th>
+                        <th className="p-3">Method</th>
+                        <th className="p-3">Reference</th>
+                        <th className="p-3">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPayments.map((payment) => {
+                        const project = projects.find(
+                          (item) => item.id === payment.project_id
+                        );
+
+                        return (
+                          <tr key={payment.id} className="border-b">
+                            <td className="p-3">
+                              {payment.payment_date
+                                ? new Date(
+                                    payment.payment_date
+                                  ).toLocaleDateString("en-IN")
+                                : "—"}
+                            </td>
+                            <td className="p-3">
+                              {project?.project_name ?? "—"}
+                            </td>
+                            <td className="p-3">
+                              {project?.customer_name ?? "—"}
+                            </td>
+                            <td className="p-3">
+                              {payment.payment_method || "—"}
+                            </td>
+                            <td className="p-3">
+                              {payment.transaction_reference || "—"}
+                            </td>
+                            <td className="p-3 font-medium">
+                              {money(payment.amount)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          )}
+
+          {![
+            "Overview",
+            "Customers",
+            "Projects & events",
+            "Payments",
+          ].includes(active) && (
             <section className="min-h-[520px] border border-[#e6e1d8] bg-[#fbfaf7] p-6 sm:p-8">
               <div className="text-[9px] uppercase tracking-[.2em] text-[#9b8a70]">
                 Chirag Photography / {active}
@@ -825,12 +1201,12 @@ export function AdminDashboard() {
                       onChange={(e) => setProjectStatus(e.target.value)}
                       className="mt-2 w-full border bg-white p-3"
                     >
-                     <option value="enquiry">Enquiry</option>
-<option value="quoted">Quoted</option>
-<option value="confirmed">Confirmed</option>
-<option value="in_progress">In Progress</option>
-<option value="completed">Completed</option>
-<option value="cancelled">Cancelled</option>
+                      <option value="enquiry">Enquiry</option>
+                      <option value="quoted">Quoted</option>
+                      <option value="confirmed">Confirmed</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
                     </select>
                   </label>
                 </div>
@@ -866,6 +1242,170 @@ export function AdminDashboard() {
                 className="flex-1 bg-[#292a25] px-4 py-3 text-sm text-white disabled:opacity-50"
               >
                 {savingProject ? "Saving..." : "Save Booking"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Record Payment Form */}
+      {showPaymentForm && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center overflow-y-auto bg-black/40 p-4">
+          <form
+            onSubmit={addPayment}
+            className="my-6 w-full max-w-xl border border-[#e6e1d8] bg-[#fbfaf7] p-6 shadow-2xl"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[9px] uppercase tracking-[.2em] text-[#9b8a70]">
+                  Payment entry
+                </div>
+                <h2 className="mt-2 font-serif text-2xl">Record Payment</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentForm(false)}
+                className="text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <label className="mt-5 block text-sm">
+              Booking *
+              <select
+                required
+                value={paymentProjectId}
+                onChange={(e) => setPaymentProjectId(e.target.value)}
+                className="mt-2 w-full border bg-white p-3"
+              >
+                <option value="">Choose a booking</option>
+                {projects.map((project) => {
+                  const received =
+                    paymentTotals.receivedByProject.get(project.id) ?? 0;
+                  const balance = Math.max(
+                    project.total_amount - received,
+                    0
+                  );
+
+                  return (
+                    <option key={project.id} value={project.id}>
+                      {project.project_name} — {project.customer_name || "Customer"} — Balance {money(balance)}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+
+            {paymentProjectId && (
+              <div className="mt-3 border border-[#e6e1d8] bg-white p-3 text-sm">
+                {(() => {
+                  const selected = projects.find(
+                    (project) => project.id === paymentProjectId
+                  );
+                  const received =
+                    paymentTotals.receivedByProject.get(paymentProjectId) ?? 0;
+                  const balance = Math.max(
+                    (selected?.total_amount ?? 0) - received,
+                    0
+                  );
+
+                  return (
+                    <div className="flex flex-wrap justify-between gap-2">
+                      <span>
+                        Booking: {money(selected?.total_amount ?? 0)}
+                      </span>
+                      <span>Received: {money(received)}</span>
+                      <strong>Balance: {money(balance)}</strong>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm">
+                Amount Received (₹) *
+                <input
+                  required
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="mt-2 w-full border bg-white p-3"
+                  placeholder="Example: 15000"
+                />
+              </label>
+
+              <label className="block text-sm">
+                Payment Date *
+                <input
+                  required
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className="mt-2 w-full border bg-white p-3"
+                />
+              </label>
+
+              <label className="block text-sm">
+                Payment Method *
+                <select
+                  required
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="mt-2 w-full border bg-white p-3"
+                >
+                  <option value="UPI">UPI</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Card">Card</option>
+                  <option value="Cheque">Cheque</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+
+              <label className="block text-sm">
+                Transaction Reference
+                <input
+                  value={paymentReference}
+                  onChange={(e) => setPaymentReference(e.target.value)}
+                  className="mt-2 w-full border bg-white p-3"
+                  placeholder="UPI / bank reference"
+                />
+              </label>
+            </div>
+
+            <label className="mt-4 block text-sm">
+              Notes
+              <textarea
+                value={paymentNotes}
+                onChange={(e) => setPaymentNotes(e.target.value)}
+                className="mt-2 w-full border bg-white p-3"
+                rows={3}
+                placeholder="Advance, second instalment, final payment..."
+              />
+            </label>
+
+            {paymentError && (
+              <p className="mt-4 text-sm text-red-600">{paymentError}</p>
+            )}
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowPaymentForm(false)}
+                className="flex-1 border border-[#ddd6cb] px-4 py-3 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingPayment || projects.length === 0}
+                className="flex-1 bg-[#292a25] px-4 py-3 text-sm text-white disabled:opacity-50"
+              >
+                {savingPayment ? "Saving..." : "Save Payment"}
               </button>
             </div>
           </form>
