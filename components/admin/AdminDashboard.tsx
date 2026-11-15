@@ -1,18 +1,9 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-type Project = {
-  id: string;
-  client: string;
-  event: string;
-  date: string;
-  venue: string;
-  amount: number;
-  paid: number;
-  status: "Confirmed" | "Enquiry" | "Editing";
-};
 type Customer = {
   id: string;
   full_name: string;
@@ -22,14 +13,27 @@ type Customer = {
   notes: string | null;
 };
 
-const initialProjects: Project[] = [
-  { id: "CP-026", client: "Ananya & Rahul", event: "Wedding", date: "08 Nov 2026", venue: "The Tamarind Tree, Bengaluru", amount: 185000, paid: 75000, status: "Confirmed" },
-  { id: "CP-025", client: "Meera Sharma", event: "Baby shower", date: "10 Nov 2026", venue: "White Petals, Bengaluru", amount: 42000, paid: 15000, status: "Confirmed" },
-  { id: "CP-024", client: "Arjun Kumar", event: "Birthday", date: "12 Nov 2026", venue: "Indiranagar, Bengaluru", amount: 28000, paid: 0, status: "Enquiry" },
-  { id: "CP-023", client: "Kavya & Nikhil", event: "Engagement", date: "14 Nov 2026", venue: "The Leela Palace, Bengaluru", amount: 68000, paid: 30000, status: "Editing" },
-];
+type BookingProject = {
+  id: string;
+  customer_id: string;
+  project_name: string;
+  event_type: string;
+  package_name: string | null;
+  total_amount: number;
+  status: string;
+  notes: string | null;
+  customer_name?: string;
+  event_date?: string;
+  venue?: string;
+  reporting_time?: string;
+};
 
-const money = (value: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
+const money = (value: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value);
 
 const nav = [
   { label: "Overview", icon: "◫" },
@@ -47,312 +51,824 @@ const nav = [
 
 export function AdminDashboard() {
   const [active, setActive] = useState("Overview");
+
+  // Customer state
   const [customers, setCustomers] = useState<Customer[]>([]);
-const [customerLoading, setCustomerLoading] = useState(true);
-const [customerError, setCustomerError] = useState("");
+  const [customerLoading, setCustomerLoading] = useState(true);
+  const [customerError, setCustomerError] = useState("");
   const [showCustomerForm, setShowCustomerForm] = useState(false);
-const [customerName, setCustomerName] = useState("");
-const [customerMobile, setCustomerMobile] = useState("");
-const [customerEmail, setCustomerEmail] = useState("");
-const [customerAddress, setCustomerAddress] = useState("");
-const [customerNotes, setCustomerNotes] = useState("");
-const [savingCustomer, setSavingCustomer] = useState(false);
+  const [customerName, setCustomerName] = useState("");
+  const [customerMobile, setCustomerMobile] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
+  const [customerNotes, setCustomerNotes] = useState("");
+  const [savingCustomer, setSavingCustomer] = useState(false);
+
+  // Project state
+  const [projects, setProjects] = useState<BookingProject[]>([]);
+  const [projectLoading, setProjectLoading] = useState(true);
+  const [projectError, setProjectError] = useState("");
+  const [showProjectForm, setShowProjectForm] = useState(false);
+  const [savingProject, setSavingProject] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
+
+  // New project form fields
+  const [selectedCustomer, setSelectedCustomer] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [eventType, setEventType] = useState("Wedding");
+  const [eventDate, setEventDate] = useState("");
+  const [venue, setVenue] = useState("");
+  const [reportingTime, setReportingTime] = useState("09:00");
+  const [packageName, setPackageName] = useState("");
+  const [totalAmount, setTotalAmount] = useState("");
+  const [projectStatus, setProjectStatus] = useState("Enquiry");
+  const [projectNotes, setProjectNotes] = useState("");
+
   const [query, setQuery] = useState("");
-  const [projects, setProjects] = useState(initialProjects);
-  const [showNew, setShowNew] = useState(false);
-  const [client, setClient] = useState("");
-  const [event, setEvent] = useState("Wedding");
-  const [date, setDate] = useState("");
-  const [amount, setAmount] = useState("");
+
+  // Load customers and projects
   useEffect(() => {
-  async function loadCustomers() {
+    async function loadCustomers() {
+      const { data, error } = await supabase
+        .from("customers")
+        .select("id, full_name, mobile, email, address, notes")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setCustomerError(error.message);
+      } else {
+        setCustomers(data ?? []);
+      }
+
+      setCustomerLoading(false);
+    }
+
+    async function loadProjects() {
+      const { data, error } = await supabase
+        .from("projects")
+        .select(
+          "id, customer_id, project_name, event_type, package_name, total_amount, status, notes"
+        )
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setProjectError(error.message);
+        setProjectLoading(false);
+        return;
+      }
+
+      const { data: eventData, error: eventError } = await supabase
+        .from("events")
+        .select("project_id, event_date, venue, reporting_time");
+
+      if (eventError) {
+        setProjectError(eventError.message);
+      }
+
+      const eventRows = eventData ?? [];
+
+      const mappedProjects = (data ?? []).map((project) => {
+        const eventInfo = eventRows.find(
+          (item) => item.project_id === project.id
+        );
+
+        return {
+          ...project,
+          total_amount: Number(project.total_amount ?? 0),
+          customer_name:
+            customers.find((customer) => customer.id === project.customer_id)
+              ?.full_name ?? "",
+          event_date: eventInfo?.event_date ?? "",
+          venue: eventInfo?.venue ?? "",
+          reporting_time: eventInfo?.reporting_time ?? "",
+        };
+      });
+
+      setProjects(mappedProjects);
+      setProjectLoading(false);
+    }
+
+    loadCustomers();
+    loadProjects();
+  }, [customers.length === 0 ? "initial" : "loaded"]);
+
+  // Add customer
+  async function addCustomer(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    if (!customerName.trim() || !customerMobile.trim()) {
+      setCustomerError("Customer name and mobile number are required.");
+      return;
+    }
+
+    setSavingCustomer(true);
+    setCustomerError("");
+
     const { data, error } = await supabase
       .from("customers")
+      .insert({
+        full_name: customerName.trim(),
+        mobile: customerMobile.trim(),
+        email: customerEmail.trim() || null,
+        address: customerAddress.trim() || null,
+        notes: customerNotes.trim() || null,
+      })
       .select("id, full_name, mobile, email, address, notes")
-      .order("created_at", { ascending: false });
+      .single();
 
     if (error) {
       setCustomerError(error.message);
     } else {
-      setCustomers(data ?? []);
+      setCustomers((current) => [data, ...current]);
+      setCustomerName("");
+      setCustomerMobile("");
+      setCustomerEmail("");
+      setCustomerAddress("");
+      setCustomerNotes("");
+      setShowCustomerForm(false);
     }
 
-    setCustomerLoading(false);
+    setSavingCustomer(false);
   }
 
-  loadCustomers();
-}, []);
-
-  const filtered = useMemo(() => projects.filter((p) => [p.id, p.client, p.event, p.venue].join(" ").toLowerCase().includes(query.toLowerCase())), [projects, query]);
-
-  function addProject(e: React.FormEvent<HTMLFormElement>) {
+  // Add project and its event
+  async function addProject(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!client.trim() || !date) return;
-    setProjects((items) => [{ id: `CP-${String(27 + items.length - initialProjects.length).padStart(3, "0")}`, client: client.trim(), event, date: new Date(date + "T12:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }), venue: "Venue to be confirmed", amount: Number(amount) || 0, paid: 0, status: "Enquiry" }, ...items]);
-    setClient(""); setDate(""); setAmount(""); setShowNew(false); setActive("Projects & events");
+
+    if (!selectedCustomer || !projectName.trim() || !eventDate) {
+      setProjectError("Please select a customer, enter a project name and event date.");
+      return;
+    }
+
+    setSavingProject(true);
+    setProjectError("");
+
+    const { data: project, error: projectInsertError } = await supabase
+      .from("projects")
+      .insert({
+        customer_id: selectedCustomer,
+        project_name: projectName.trim(),
+        event_type: eventType,
+        package_name: packageName.trim() || null,
+        total_amount: Number(totalAmount) || 0,
+        status: projectStatus,
+        notes: projectNotes.trim() || null,
+      })
+      .select(
+        "id, customer_id, project_name, event_type, package_name, total_amount, status, notes"
+      )
+      .single();
+
+    if (projectInsertError) {
+      setProjectError(projectInsertError.message);
+      setSavingProject(false);
+      return;
+    }
+
+    const reportingDateTime = `${eventDate}T${reportingTime || "09:00"}:00`;
+
+    const { error: eventInsertError } = await supabase.from("events").insert({
+      project_id: project.id,
+      event_name: projectName.trim(),
+      event_date: eventDate,
+      venue: venue.trim() || null,
+      reporting_time: reportingDateTime,
+    });
+
+    if (eventInsertError) {
+      setProjectError(
+        `The project was saved, but its event details could not be saved: ${eventInsertError.message}`
+      );
+      setSavingProject(false);
+      return;
+    }
+
+    const customer = customers.find((item) => item.id === selectedCustomer);
+
+    setProjects((current) => [
+      {
+        ...project,
+        total_amount: Number(project.total_amount ?? 0),
+        customer_name: customer?.full_name ?? "",
+        event_date: eventDate,
+        venue,
+        reporting_time: reportingDateTime,
+      },
+      ...current,
+    ]);
+
+    setSelectedCustomer("");
+    setProjectName("");
+    setEventType("Wedding");
+    setEventDate("");
+    setVenue("");
+    setReportingTime("09:00");
+    setPackageName("");
+    setTotalAmount("");
+    setProjectStatus("Enquiry");
+    setProjectNotes("");
+    setShowProjectForm(false);
+    setActive("Projects & events");
+    setSavingProject(false);
   }
-async function addCustomer(e: React.FormEvent<HTMLFormElement>) {
-  e.preventDefault();
 
-  if (!customerName.trim() || !customerMobile.trim()) {
-    alert("Customer name and mobile number are required.");
-    return;
-  }
+  const filteredProjects = useMemo(() => {
+    const search = projectSearch.toLowerCase();
 
-  setSavingCustomer(true);
-  setCustomerError("");
+    return projects.filter((project) =>
+      [
+        project.project_name,
+        project.customer_name ?? "",
+        project.event_type,
+        project.venue ?? "",
+        project.status,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(search)
+    );
+  }, [projects, projectSearch]);
 
-  const { data, error } = await supabase
-    .from("customers")
-    .insert({
-      full_name: customerName.trim(),
-      mobile: customerMobile.trim(),
-      email: customerEmail.trim() || null,
-      address: customerAddress.trim() || null,
-      notes: customerNotes.trim() || null,
-    })
-    .select("id, full_name, mobile, email, address, notes")
-    .single();
+  const totalValue = projects.reduce(
+    (sum, project) => sum + project.total_amount,
+    0
+  );
 
-  if (error) {
-    setCustomerError(error.message);
-  } else {
-    setCustomers((current) => [data, ...current]);
-    setCustomerName("");
-    setCustomerMobile("");
-    setCustomerEmail("");
-    setCustomerAddress("");
-    setCustomerNotes("");
-    setShowCustomerForm(false);
-  }
-
-  setSavingCustomer(false);
-}
-  const total = projects.reduce((sum, p) => sum + p.amount, 0);
-  const received = projects.reduce((sum, p) => sum + p.paid, 0);
+  const filteredCustomers = customers.filter((customer) =>
+    [customer.full_name, customer.mobile, customer.email ?? ""]
+      .join(" ")
+      .toLowerCase()
+      .includes(query.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-[#f6f4ef] text-[#22231f]">
-      <div className="border-b border-[#e6e1d8] bg-[#fbfaf7] px-5 py-3 text-center text-[10px] font-semibold uppercase tracking-[.22em] text-[#8b7658]">Studio workspace · Preview mode · Sample records</div>
+      <div className="border-b border-[#e6e1d8] bg-[#fbfaf7] px-5 py-3 text-center text-[10px] font-semibold uppercase tracking-[.22em] text-[#8b7658]">
+        Chirag Photography · Studio Management
+      </div>
+
       <div className="mx-auto flex max-w-[1600px]">
         <aside className="hidden min-h-[calc(100vh-44px)] w-[250px] shrink-0 border-r border-[#e7e2d9] bg-[#f1eee8] px-5 py-7 lg:block">
           <div className="mb-10 px-2">
-            <div className="font-serif text-[27px] leading-none">Chirag <span className="italic">Studio</span></div>
-            <div className="mt-2 text-[9px] uppercase tracking-[.24em] text-[#8a8378]">Photography management</div>
+            <div className="font-serif text-[27px] leading-none">
+              Chirag <span className="italic">Studio</span>
+            </div>
+            <div className="mt-2 text-[9px] uppercase tracking-[.24em] text-[#8a8378]">
+              Photography management
+            </div>
           </div>
-          <div className="mb-3 px-3 text-[9px] font-bold uppercase tracking-[.2em] text-[#9b9388]">Workspace</div>
+
+          <div className="mb-3 px-3 text-[9px] font-bold uppercase tracking-[.2em] text-[#9b9388]">
+            Workspace
+          </div>
+
           <nav className="space-y-1">
-            {nav.map((item) => <button key={item.label} onClick={() => setActive(item.label)} className={`flex w-full items-center gap-3 rounded-sm px-3 py-3 text-left text-[12px] transition ${active === item.label ? "bg-[#292a25] text-white shadow-sm" : "text-[#625f58] hover:bg-white/70"}`}>
-              <span className="w-5 text-center text-[15px]">{item.icon}</span>{item.label}
-              {item.label === "Enquiries" && <span className="ml-auto rounded-full bg-[#d7c3a2] px-2 py-0.5 text-[9px] text-[#332b20]">3</span>}
-            </button>)}
+            {nav.map((item) => (
+              <button
+                key={item.label}
+                onClick={() => setActive(item.label)}
+                className={`flex w-full items-center gap-3 rounded-sm px-3 py-3 text-left text-[12px] transition ${
+                  active === item.label
+                    ? "bg-[#292a25] text-white shadow-sm"
+                    : "text-[#625f58] hover:bg-white/70"
+                }`}
+              >
+                <span className="w-5 text-center text-[15px]">
+                  {item.icon}
+                </span>
+                {item.label}
+              </button>
+            ))}
           </nav>
+
           <div className="mt-12 rounded-sm border border-[#dfd8cc] bg-[#f8f6f1] p-4">
-            <div className="text-[9px] uppercase tracking-[.18em] text-[#8a8378]">Need a hand?</div>
-            <p className="mt-2 font-serif text-[19px] leading-tight">Your studio, all in one place.</p>
-            <p className="mt-2 text-[10px] leading-5 text-[#777168]">Customer, crew and event tools will live here.</p>
+            <div className="text-[9px] uppercase tracking-[.18em] text-[#8a8378]">
+              Studio workspace
+            </div>
+            <p className="mt-2 font-serif text-[19px] leading-tight">
+              Your studio, all in one place.
+            </p>
           </div>
         </aside>
 
         <main className="min-w-0 flex-1 px-5 py-7 sm:px-8 lg:px-10 lg:py-9">
           <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div className="mb-2 text-[9px] uppercase tracking-[.24em] text-[#968b7b]">Chirag Photography / Workspace</div>
-              <h1 className="font-serif text-[36px] leading-none sm:text-[44px]">{active === "Overview" ? "Good morning, Chirag." : active}</h1>
-              <p className="mt-2 text-[12px] text-[#827c72]">{active === "Overview" ? "Here’s what’s happening with your studio." : "Workspace preview — live data and permissions will be connected in the next phase."}</p>
+              <div className="mb-2 text-[9px] uppercase tracking-[.24em] text-[#968b7b]">
+                Chirag Photography / Workspace
+              </div>
+              <h1 className="font-serif text-[36px] leading-none sm:text-[44px]">
+                {active === "Overview" ? "Studio Dashboard" : active}
+              </h1>
+              <p className="mt-2 text-[12px] text-[#827c72]">
+                Manage your customers, bookings and studio operations.
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="hidden rounded-full border border-[#e2ddd4] bg-white px-4 py-2 text-[10px] text-[#777168] sm:block">● Owner workspace</div>
-              <button onClick={() => setShowNew(true)} className="rounded-sm bg-[#292a25] px-4 py-3 text-[10px] font-semibold uppercase tracking-[.12em] text-white transition hover:bg-[#494a42]">+ New project</button>
-            </div>
+
+            {active === "Projects & events" && (
+              <button
+                onClick={() => {
+                  setProjectError("");
+                  setShowProjectForm(true);
+                }}
+                className="rounded-sm bg-[#292a25] px-4 py-3 text-[10px] font-semibold uppercase tracking-[.12em] text-white"
+              >
+                + New Booking
+              </button>
+            )}
+
+            {active === "Customers" && (
+              <button
+                onClick={() => {
+                  setCustomerError("");
+                  setShowCustomerForm(true);
+                }}
+                className="rounded-sm bg-[#292a25] px-4 py-3 text-[10px] font-semibold uppercase tracking-[.12em] text-white"
+              >
+                + Add Customer
+              </button>
+            )}
           </div>
 
-          {active === "Overview" ? (
-      <>
-          <div className="mb-8 grid grid-cols-2 gap-3 xl:grid-cols-4">
-            {[
-              ["Active projects", String(projects.filter(p => p.status !== "Enquiry").length).padStart(2, "0"), "Across current bookings"],
-              ["Upcoming events", "08", "Next 30 days · sample"],
-              ["Project value", money(total), "Total contract value"],
-              ["Payments received", money(received), `${money(total - received)} outstanding`],
-            ].map(([label, value, note], i) => <div key={label} className="border border-[#e6e1d8] bg-[#fbfaf7] p-4 sm:p-5">
-              <div className="text-[9px] font-semibold uppercase tracking-[.16em] text-[#91897e]">{label}</div>
-              <div className="mt-4 break-words font-serif text-[25px] sm:text-[30px]">{value}</div>
-              <div className="mt-1 text-[10px] text-[#8b8479]">{note}</div>
-              {i === 3 && <div className="mt-4 h-[3px] overflow-hidden bg-[#e8e3da]"><div className="h-full bg-[#a98e68]" style={{ width: total ? `${Math.min(100, received / total * 100)}%` : "0%" }} /></div>}
-            </div>)}
-          </div>
-
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(260px,.8fr)]">
-            <section className="min-w-0 border border-[#e6e1d8] bg-[#fbfaf7]">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e9e4dc] px-5 py-5">
-                <div><h2 className="font-serif text-[25px]">Recent projects</h2><p className="mt-1 text-[10px] text-[#8b8479]">Bookings, enquiries and delivery status</p></div>
-                <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search projects…" className="w-full border border-[#e4ded4] bg-white px-3 py-2 text-[11px] outline-none focus:border-[#a98e68] sm:w-48" />
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[620px] text-left">
-                  <thead><tr className="text-[9px] uppercase tracking-[.14em] text-[#938b80]"><th className="px-5 py-3 font-semibold">Client / ID</th><th className="px-3 py-3 font-semibold">Event date</th><th className="px-3 py-3 font-semibold">Value</th><th className="px-3 py-3 font-semibold">Balance</th><th className="px-5 py-3 font-semibold">Status</th></tr></thead>
-                  <tbody>{filtered.map(p => <tr key={p.id} className="border-t border-[#eee9e1] text-[11px]">
-                    <td className="px-5 py-4"><div className="font-semibold text-[#373832]">{p.client}</div><div className="mt-1 text-[9px] text-[#999186]">{p.id} · {p.event}</div></td>
-                    <td className="px-3 py-4 text-[#69665f]">{p.date}</td>
-                    <td className="px-3 py-4 tabular-nums">{money(p.amount)}</td>
-                    <td className="px-3 py-4 tabular-nums">{money(p.amount-p.paid)}</td>
-                    <td className="px-5 py-4"><span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[9px] ${p.status === "Confirmed" ? "bg-[#e6eee3] text-[#52694e]" : p.status === "Editing" ? "bg-[#eee8dc] text-[#806c4d]" : "bg-[#f3e8e3] text-[#96664f]"}`}>{p.status}</span></td>
-                  </tr>)}</tbody>
-                </table>
-                {filtered.length === 0 && <p className="px-5 py-10 text-center text-[12px] text-[#8b8479]">No matching projects.</p>}
-              </div>
-              <div className="border-t border-[#e9e4dc] px-5 py-3 text-[9px] text-[#999186]">Sample data only — no customer records have been stored.</div>
-            </section>
-
-            <div className="space-y-6">
-              <section className="border border-[#e6e1d8] bg-[#fbfaf7] p-5">
-                <div className="flex items-center justify-between"><h2 className="font-serif text-[23px]">Next on the calendar</h2><button onClick={() => setActive("Calendar")} className="text-[9px] uppercase tracking-[.12em] text-[#8a7658]">View all ↗</button></div>
-                <div className="mt-5 space-y-4">
-                  {[["08","NOV","Ananya & Rahul","Wedding · 10:00 AM"],["10","NOV","Meera Sharma","Baby shower · 11:30 AM"],["12","NOV","Arjun Kumar","Birthday · 5:00 PM"]].map(([day,month,name,meta]) => <div key={name} className="flex gap-3 border-b border-[#eee9e1] pb-4 last:border-0 last:pb-0"><div className="w-11 shrink-0 text-center"><div className="font-serif text-[25px] leading-none">{day}</div><div className="mt-1 text-[8px] tracking-[.15em] text-[#948b7f]">{month}</div></div><div><div className="text-[11px] font-semibold">{name}</div><div className="mt-1 text-[9px] text-[#8b8479]">{meta}</div></div></div>)}
+          {active === "Overview" && (
+            <>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="border border-[#e6e1d8] bg-[#fbfaf7] p-5">
+                  <div className="text-[10px] uppercase tracking-wider text-[#91897e]">
+                    Total Customers
+                  </div>
+                  <div className="mt-3 font-serif text-3xl">
+                    {customers.length}
+                  </div>
                 </div>
-              </section>
-              <section className="bg-[#292a25] p-5 text-[#f7f4ee]">
-                <div className="text-[9px] uppercase tracking-[.2em] text-[#c9b28e]">Studio checklist</div>
-                <h2 className="mt-3 font-serif text-[25px] leading-tight">Build your workflow, one step at a time.</h2>
-                <ul className="mt-4 space-y-3 text-[10px] text-[#d5d0c6]">{["Add customer & enquiry records","Create packages and quotations","Invite photographers & crew","Connect private NAS galleries"].map((s,i) => <li key={s} className="flex gap-2"><span className="text-[#c9b28e]">{String(i+1).padStart(2,"0")}</span>{s}</li>)}</ul>
-              </section>
-            </div>
-          </div>
-          <div className="mt-8 flex flex-wrap justify-between gap-2 border-t border-[#e4ded4] pt-4 text-[9px] uppercase tracking-[.14em] text-[#a0998e]"><span>Chirag Photography · Bengaluru</span><span>Management workspace · Preview build</span></div>
-          </>
-        ) : active === "Customers" ? (
-      
-<section className="min-h-[520px] border border-[#e6e1d8] bg-white p-6 sm:p-8">
-  <div className="flex flex-wrap items-center justify-between gap-4">
-    <div>
-      <h2 className="font-serif text-2xl">Customer Records</h2>
-      <p className="mt-1 text-sm text-[#827c72]">
-        Manage your photography studio customers.
-      </p>
-    </div>
-    <button
-      type="button"
-      onClick={() => setShowCustomerForm(!showCustomerForm)}
-      className="bg-[#292a25] px-4 py-3 text-xs text-white"
-    >
-      {showCustomerForm ? "Cancel" : "+ Add Customer"}
-    </button>
-  </div>
 
-  {showCustomerForm && (
-    <form onSubmit={addCustomer} className="mt-6 grid gap-4 sm:grid-cols-2">
-      <label className="text-sm">
-        Customer Name *
-        <input required value={customerName}
-          onChange={(e) => setCustomerName(e.target.value)}
-          className="mt-2 w-full border p-3" placeholder="Full name" />
-      </label>
+                <div className="border border-[#e6e1d8] bg-[#fbfaf7] p-5">
+                  <div className="text-[10px] uppercase tracking-wider text-[#91897e]">
+                    Total Projects
+                  </div>
+                  <div className="mt-3 font-serif text-3xl">
+                    {projects.length}
+                  </div>
+                </div>
 
-      <label className="text-sm">
-        Mobile Number *
-        <input required type="tel" value={customerMobile}
-          onChange={(e) => setCustomerMobile(e.target.value)}
-          className="mt-2 w-full border p-3" placeholder="Mobile number" />
-      </label>
-
-      <label className="text-sm">
-        Email
-        <input type="email" value={customerEmail}
-          onChange={(e) => setCustomerEmail(e.target.value)}
-          className="mt-2 w-full border p-3" placeholder="Email address" />
-      </label>
-
-      <label className="text-sm">
-        Address
-        <input value={customerAddress}
-          onChange={(e) => setCustomerAddress(e.target.value)}
-          className="mt-2 w-full border p-3" placeholder="Customer address" />
-      </label>
-
-      <label className="text-sm sm:col-span-2">
-        Notes
-        <textarea value={customerNotes}
-          onChange={(e) => setCustomerNotes(e.target.value)}
-          className="mt-2 w-full border p-3" rows={3}
-          placeholder="Additional customer notes" />
-      </label>
-
-      <button type="submit" disabled={savingCustomer}
-        className="bg-[#292a25] px-5 py-3 text-sm text-white disabled:opacity-50 sm:col-span-2">
-        {savingCustomer ? "Saving..." : "Save Customer"}
-      </button>
-    </form>
-  )}
-
-  {customerError && (
-    <p className="mt-4 text-sm text-red-600">{customerError}</p>
-  )}
-
-  <div className="mt-6 text-sm text-[#827c72]">
-    Total Customers: {customers.length}
-  </div>
-
-  {customerLoading ? (
-    <p className="mt-4">Loading customers...</p>
-  ) : customers.length === 0 ? (
-    <p className="mt-4 text-sm text-[#827c72]">
-      No customers added yet.
-    </p>
-  ) : (
-    <div className="mt-4 overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b">
-            <th className="p-3">Name</th>
-            <th className="p-3">Mobile</th>
-            <th className="p-3">Email</th>
-          </tr>
-        </thead>
-        <tbody>
-          {customers.map((customer) => (
-            <tr key={customer.id} className="border-b">
-              <td className="p-3">{customer.full_name}</td>
-              <td className="p-3">{customer.mobile}</td>
-              <td className="p-3">{customer.email || "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )}
-</section>
-
-     
-      ) : (
-            <section className="min-h-[520px] border border-[#e6e1d8] bg-[#fbfaf7] p-6 sm:p-8">
-              <div className="text-[9px] uppercase tracking-[.2em] text-[#9b8a70]">Chirag Photography / {active}</div>
-              <h2 className="mt-3 font-serif text-[30px]"> {active} </h2>
-              <p className="mt-2 max-w-2xl text-[12px] leading-6 text-[#827c72]">This section now has its own workspace view. It is currently a layout preview with sample information; database saving, user login and role permissions are the next implementation steps.</p>
-              <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {[
-                  ["Workspace", active === "Customers" ? "Customer profiles and contact details" : active === "Projects & events" ? "Bookings, event details and delivery status" : active === "Enquiries" ? "New enquiries and follow-up status" : active === "Quotations" ? "Packages, estimates and quotation status" : active === "Payments" ? "Advances, instalments and outstanding balances" : active === "Team & assignments" ? "Photographer profiles and event assignments" : active === "Calendar" ? "Upcoming shoots, dates and reporting times" : active === "Galleries" ? "Private event albums and delivery status" : active === "Reports" ? "Business performance and project summaries" : "Studio preferences and access controls"],
-                  ["Quick actions", "Add, review and update records will be enabled in the next build"],
-                  ["Data status", "Preview only · No live customer or financial records are connected"]
-                ].map(([label, value]) => <div key={label} className="border border-[#e6e1d8] bg-white p-5"><div className="text-[9px] font-semibold uppercase tracking-[.16em] text-[#91897e]">{label}</div><p className="mt-3 font-serif text-[19px] leading-snug">{value}</p></div>)}
+                <div className="border border-[#e6e1d8] bg-[#fbfaf7] p-5">
+                  <div className="text-[10px] uppercase tracking-wider text-[#91897e]">
+                    Project Value
+                  </div>
+                  <div className="mt-3 break-words font-serif text-2xl">
+                    {money(totalValue)}
+                  </div>
+                </div>
               </div>
-              <div className="mt-8 border-t border-[#e9e4dc] pt-5 text-[11px] text-[#8b8479]">Use the left menu to switch between workspace sections. Each menu item now opens a distinct section view.</div>
+
+              <section className="mt-8 border border-[#e6e1d8] bg-[#fbfaf7] p-5">
+                <h2 className="font-serif text-2xl">Recent Projects</h2>
+                {projects.length === 0 ? (
+                  <p className="mt-4 text-sm text-[#827c72]">
+                    No projects have been created yet.
+                  </p>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {projects.slice(0, 5).map((project) => (
+                      <div
+                        key={project.id}
+                        className="flex flex-wrap justify-between gap-2 border-b border-[#e9e4dc] py-3 text-sm"
+                      >
+                        <div>
+                          <div className="font-medium">
+                            {project.project_name}
+                          </div>
+                          <div className="text-xs text-[#827c72]">
+                            {project.customer_name} · {project.event_type}
+                          </div>
+                        </div>
+                        <div className="text-sm">
+                          {money(project.total_amount)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+
+          {active === "Customers" && (
+            <section className="min-h-[520px] border border-[#e6e1d8] bg-white p-6 sm:p-8">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-serif text-2xl">Customer Records</h2>
+                  <p className="mt-1 text-sm text-[#827c72]">
+                    Manage your photography studio customers.
+                  </p>
+                </div>
+                <div className="text-sm text-[#827c72]">
+                  Total Customers: {customers.length}
+                </div>
+              </div>
+
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search customers..."
+                className="mt-6 w-full border border-[#e1dbd1] px-3 py-3 text-sm sm:max-w-sm"
+              />
+
+              {customerError && (
+                <p className="mt-4 text-sm text-red-600">{customerError}</p>
+              )}
+
+              {customerLoading ? (
+                <p className="mt-6 text-sm">Loading customers...</p>
+              ) : filteredCustomers.length === 0 ? (
+                <p className="mt-6 text-sm text-[#827c72]">
+                  No customers found.
+                </p>
+              ) : (
+                <div className="mt-6 overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b text-[#827c72]">
+                        <th className="p-3">Name</th>
+                        <th className="p-3">Mobile</th>
+                        <th className="p-3">Email</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredCustomers.map((customer) => (
+                        <tr key={customer.id} className="border-b">
+                          <td className="p-3 font-medium">
+                            {customer.full_name}
+                          </td>
+                          <td className="p-3">{customer.mobile}</td>
+                          <td className="p-3">{customer.email || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
           )}
 
+          {active === "Projects & events" && (
+            <section className="min-h-[520px] border border-[#e6e1d8] bg-white p-6 sm:p-8">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-serif text-2xl">Projects & Events</h2>
+                  <p className="mt-1 text-sm text-[#827c72]">
+                    Track bookings, customers and event schedules.
+                  </p>
+                </div>
+                <div className="text-sm text-[#827c72]">
+                  Total Projects: {projects.length}
+                </div>
+              </div>
+
+              <input
+                value={projectSearch}
+                onChange={(e) => setProjectSearch(e.target.value)}
+                placeholder="Search projects..."
+                className="mt-6 w-full border border-[#e1dbd1] px-3 py-3 text-sm sm:max-w-sm"
+              />
+
+              {projectError && (
+                <p className="mt-4 text-sm text-red-600">{projectError}</p>
+              )}
+
+              {projectLoading ? (
+                <p className="mt-6 text-sm">Loading projects...</p>
+              ) : filteredProjects.length === 0 ? (
+                <p className="mt-6 text-sm text-[#827c72]">
+                  No projects found. Click New Booking to create one.
+                </p>
+              ) : (
+                <div className="mt-6 overflow-x-auto">
+                  <table className="w-full min-w-[750px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b text-[#827c72]">
+                        <th className="p-3">Project</th>
+                        <th className="p-3">Customer</th>
+                        <th className="p-3">Event Date</th>
+                        <th className="p-3">Venue</th>
+                        <th className="p-3">Amount</th>
+                        <th className="p-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredProjects.map((project) => (
+                        <tr key={project.id} className="border-b">
+                          <td className="p-3 font-medium">
+                            {project.project_name}
+                            <div className="text-xs text-[#827c72]">
+                              {project.event_type}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            {project.customer_name || "—"}
+                          </td>
+                          <td className="p-3">
+                            {project.event_date || "—"}
+                          </td>
+                          <td className="p-3">{project.venue || "—"}</td>
+                          <td className="p-3">
+                            {money(project.total_amount)}
+                          </td>
+                          <td className="p-3">{project.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          )}
+
+          {!["Overview", "Customers", "Projects & events"].includes(active) && (
+            <section className="min-h-[520px] border border-[#e6e1d8] bg-[#fbfaf7] p-6 sm:p-8">
+              <div className="text-[9px] uppercase tracking-[.2em] text-[#9b8a70]">
+                Chirag Photography / {active}
+              </div>
+              <h2 className="mt-3 font-serif text-[30px]">{active}</h2>
+              <p className="mt-2 text-sm leading-6 text-[#827c72]">
+                This workspace will be connected in the next development phase.
+              </p>
+            </section>
+          )}
         </main>
       </div>
 
-      {showNew && <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="new-project-title">
-        <form onSubmit={addProject} className="w-full max-w-md border border-[#e6e1d8] bg-[#fbfaf7] p-6 shadow-2xl">
-          <div className="flex items-start justify-between"><div><div className="text-[9px] uppercase tracking-[.2em] text-[#9b8a70]">Project intake</div><h2 id="new-project-title" className="mt-2 font-serif text-[30px]">New project</h2></div><button type="button" onClick={() => setShowNew(false)} className="text-xl text-[#81796e]" aria-label="Close">×</button></div>
-          <label className="mt-5 block text-[10px] font-semibold uppercase tracking-[.12em] text-[#777168]">Customer name<input required value={client} onChange={e=>setClient(e.target.value)} className="mt-2 w-full border border-[#e1dbd1] bg-white px-3 py-3 text-[12px] normal-case tracking-normal outline-none focus:border-[#a98e68]" placeholder="Enter customer name" /></label>
-          <div className="mt-4 grid grid-cols-2 gap-3"><label className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#777168]">Event type<select value={event} onChange={e=>setEvent(e.target.value)} className="mt-2 w-full border border-[#e1dbd1] bg-white px-3 py-3 text-[11px] normal-case tracking-normal"><option>Wedding</option><option>Engagement</option><option>Birthday</option><option>Baby shower</option><option>Corporate</option><option>Other</option></select></label><label className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#777168]">Event date<input required type="date" value={date} onChange={e=>setDate(e.target.value)} className="mt-2 w-full border border-[#e1dbd1] bg-white px-3 py-3 text-[11px] normal-case tracking-normal" /></label></div>
-          <label className="mt-4 block text-[10px] font-semibold uppercase tracking-[.12em] text-[#777168]">Estimated value (₹)<input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)} className="mt-2 w-full border border-[#e1dbd1] bg-white px-3 py-3 text-[12px] normal-case tracking-normal" placeholder="e.g. 50000" /></label>
-          <p className="mt-4 text-[10px] leading-5 text-[#91897e]">Preview only. This form adds a temporary row in this browser session; it does not save to a database.</p>
-          <div className="mt-5 flex gap-2"><button type="button" onClick={()=>setShowNew(false)} className="flex-1 border border-[#ddd6cb] px-4 py-3 text-[10px] uppercase tracking-[.12em]">Cancel</button><button type="submit" className="flex-1 bg-[#292a25] px-4 py-3 text-[10px] uppercase tracking-[.12em] text-white">Add project</button></div>
-        </form>
-      </div>}
+      {/* Add Customer Form */}
+      {showCustomerForm && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center overflow-y-auto bg-black/40 p-4">
+          <form
+            onSubmit={addCustomer}
+            className="my-6 w-full max-w-lg border border-[#e6e1d8] bg-[#fbfaf7] p-6 shadow-2xl"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-serif text-2xl">Add Customer</h2>
+              <button
+                type="button"
+                onClick={() => setShowCustomerForm(false)}
+                className="text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <label className="mt-5 block text-sm">
+              Customer Name *
+              <input
+                required
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                className="mt-2 w-full border p-3"
+                placeholder="Full name"
+              />
+            </label>
+
+            <label className="mt-4 block text-sm">
+              Mobile Number *
+              <input
+                required
+                type="tel"
+                value={customerMobile}
+                onChange={(e) => setCustomerMobile(e.target.value)}
+                className="mt-2 w-full border p-3"
+                placeholder="Mobile number"
+              />
+            </label>
+
+            <label className="mt-4 block text-sm">
+              Email
+              <input
+                type="email"
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+                className="mt-2 w-full border p-3"
+                placeholder="Email address"
+              />
+            </label>
+
+            <label className="mt-4 block text-sm">
+              Address
+              <input
+                value={customerAddress}
+                onChange={(e) => setCustomerAddress(e.target.value)}
+                className="mt-2 w-full border p-3"
+                placeholder="Customer address"
+              />
+            </label>
+
+            <label className="mt-4 block text-sm">
+              Notes
+              <textarea
+                value={customerNotes}
+                onChange={(e) => setCustomerNotes(e.target.value)}
+                className="mt-2 w-full border p-3"
+                rows={3}
+                placeholder="Additional notes"
+              />
+            </label>
+
+            {customerError && (
+              <p className="mt-3 text-sm text-red-600">{customerError}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={savingCustomer}
+              className="mt-5 w-full bg-[#292a25] px-5 py-3 text-sm text-white disabled:opacity-50"
+            >
+              {savingCustomer ? "Saving..." : "Save Customer"}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* New Project Form */}
+      {showProjectForm && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center overflow-y-auto bg-black/40 p-4">
+          <form
+            onSubmit={addProject}
+            className="my-6 w-full max-w-2xl border border-[#e6e1d8] bg-[#fbfaf7] p-6 shadow-2xl"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[9px] uppercase tracking-[.2em] text-[#9b8a70]">
+                  Project intake
+                </div>
+                <h2 className="mt-2 font-serif text-2xl">New Booking</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowProjectForm(false)}
+                className="text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            {customers.length === 0 ? (
+              <p className="mt-5 text-sm text-red-600">
+                Please add a customer before creating a booking.
+              </p>
+            ) : (
+              <>
+                <label className="mt-5 block text-sm">
+                  Select Customer *
+                  <select
+                    required
+                    value={selectedCustomer}
+                    onChange={(e) => setSelectedCustomer(e.target.value)}
+                    className="mt-2 w-full border bg-white p-3"
+                  >
+                    <option value="">Choose a customer</option>
+                    {customers.map((customer) => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.full_name} — {customer.mobile}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="mt-4 block text-sm">
+                  Project / Booking Name *
+                  <input
+                    required
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    className="mt-2 w-full border p-3"
+                    placeholder="Example: Rahul Wedding"
+                  />
+                </label>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="block text-sm">
+                    Event Type
+                    <select
+                      value={eventType}
+                      onChange={(e) => setEventType(e.target.value)}
+                      className="mt-2 w-full border bg-white p-3"
+                    >
+                      <option>Wedding</option>
+                      <option>Engagement</option>
+                      <option>Reception</option>
+                      <option>Birthday</option>
+                      <option>Baby shower</option>
+                      <option>Pre-wedding</option>
+                      <option>Maternity</option>
+                      <option>Corporate</option>
+                      <option>Other</option>
+                    </select>
+                  </label>
+
+                  <label className="block text-sm">
+                    Event Date *
+                    <input
+                      required
+                      type="date"
+                      value={eventDate}
+                      onChange={(e) => setEventDate(e.target.value)}
+                      className="mt-2 w-full border bg-white p-3"
+                    />
+                  </label>
+
+                  <label className="block text-sm">
+                    Reporting Time
+                    <input
+                      type="time"
+                      value={reportingTime}
+                      onChange={(e) => setReportingTime(e.target.value)}
+                      className="mt-2 w-full border bg-white p-3"
+                    />
+                  </label>
+
+                  <label className="block text-sm">
+                    Package Name
+                    <input
+                      value={packageName}
+                      onChange={(e) => setPackageName(e.target.value)}
+                      className="mt-2 w-full border p-3"
+                      placeholder="Gold / Platinum / Premium"
+                    />
+                  </label>
+                </div>
+
+                <label className="mt-4 block text-sm">
+                  Venue
+                  <input
+                    value={venue}
+                    onChange={(e) => setVenue(e.target.value)}
+                    className="mt-2 w-full border p-3"
+                    placeholder="Event venue and address"
+                  />
+                </label>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="block text-sm">
+                    Total Amount (₹)
+                    <input
+                      type="number"
+                      min="0"
+                      value={totalAmount}
+                      onChange={(e) => setTotalAmount(e.target.value)}
+                      className="mt-2 w-full border p-3"
+                      placeholder="Example: 75000"
+                    />
+                  </label>
+
+                  <label className="block text-sm">
+                    Booking Status
+                    <select
+                      value={projectStatus}
+                      onChange={(e) => setProjectStatus(e.target.value)}
+                      className="mt-2 w-full border bg-white p-3"
+                    >
+                      <option value="Enquiry">Enquiry</option>
+                      <option value="Confirmed">Confirmed</option>
+                      <option value="Editing">Editing</option>
+                      <option value="Completed">Completed</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label className="mt-4 block text-sm">
+                  Notes
+                  <textarea
+                    value={projectNotes}
+                    onChange={(e) => setProjectNotes(e.target.value)}
+                    className="mt-2 w-full border p-3"
+                    rows={3}
+                    placeholder="Additional booking details"
+                  />
+                </label>
+              </>
+            )}
+
+            {projectError && (
+              <p className="mt-4 text-sm text-red-600">{projectError}</p>
+            )}
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowProjectForm(false)}
+                className="flex-1 border border-[#ddd6cb] px-4 py-3 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingProject || customers.length === 0}
+                className="flex-1 bg-[#292a25] px-4 py-3 text-sm text-white disabled:opacity-50"
+              >
+                {savingProject ? "Saving..." : "Save Booking"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
