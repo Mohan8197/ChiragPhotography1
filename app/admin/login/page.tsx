@@ -19,18 +19,31 @@ export default function AdminLoginPage() {
     setError("");
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    setLoading(false);
-
-    if (error) {
-      setError(error.message);
+    if (error || !data.user) {
+      setLoading(false);
+      setError(error?.message ?? "Unable to sign in. Please try again.");
       return;
     }
 
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", data.user.id)
+      .maybeSingle();
+
+    if (profileError || !profile || !["owner", "admin"].includes(profile.role)) {
+      await supabase.auth.signOut();
+      setLoading(false);
+      setError("This account does not have Owner or Admin access.");
+      return;
+    }
+
+    setLoading(false);
     router.replace("/admin");
   }
 
