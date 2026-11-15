@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type Customer = {
@@ -12,19 +13,29 @@ type Customer = {
   notes: string | null;
 };
 
-type BookingProject = {
+type Project = {
   id: string;
   customer_id: string;
   project_name: string;
-  event_type: string;
+  event_type: string | null;
   package_name: string | null;
   total_amount: number;
   status: string;
   notes: string | null;
   customer_name?: string;
-  event_date?: string;
-  venue?: string;
-  reporting_time?: string;
+};
+
+type StudioEvent = {
+  id: string;
+  project_id: string;
+  event_name: string;
+  event_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  venue: string | null;
+  reporting_time: string | null;
+  project_name?: string;
+  customer_name?: string;
 };
 
 type Payment = {
@@ -37,227 +48,337 @@ type Payment = {
   notes: string | null;
 };
 
-const money = (value: number) =>
+type Expense = {
+  id: string;
+  project_id: string | null;
+  expense_name: string;
+  amount: number;
+  expense_date: string | null;
+  notes: string | null;
+};
+
+type Profile = {
+  id: string;
+  full_name: string;
+  mobile: string | null;
+  role: string;
+  customer_id: string | null;
+};
+
+type Assignment = {
+  id: string;
+  event_id: string;
+  staff_id: string;
+  assignment_role: string | null;
+  payment_amount: number;
+  status: string;
+};
+
+const nav = [
+  ["Overview", "◫"],
+  ["Customers", "♙"],
+  ["Projects & events", "▣"],
+  ["Enquiries", "✉"],
+  ["Quotations", "▤"],
+  ["Payments", "₹"],
+  ["Expenses", "−"],
+  ["Team & assignments", "♧"],
+  ["Calendar", "▦"],
+  ["Galleries", "▧"],
+  ["Reports", "▥"],
+  ["Settings", "⚙"],
+];
+
+const statuses = [
+  "enquiry",
+  "quoted",
+  "confirmed",
+  "in_progress",
+  "completed",
+  "cancelled",
+];
+
+const money = (n: number) =>
   new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(n || 0);
 
-const nav = [
-  { label: "Overview", icon: "◫" },
-  { label: "Customers", icon: "♙" },
-  { label: "Projects & events", icon: "▣" },
-  { label: "Enquiries", icon: "✉" },
-  { label: "Quotations", icon: "▤" },
-  { label: "Payments", icon: "₹" },
-  { label: "Team & assignments", icon: "♧" },
-  { label: "Calendar", icon: "▦" },
-  { label: "Galleries", icon: "▧" },
-  { label: "Reports", icon: "▥" },
-  { label: "Settings", icon: "⚙" },
-];
+const today = () => new Date().toISOString().slice(0, 10);
+
+const inputClass =
+  "mt-1 w-full border border-[#ded8ce] bg-white px-3 py-3 text-sm outline-none focus:border-[#8b7658]";
+
+const buttonClass =
+  "bg-[#292a25] px-4 py-3 text-xs font-semibold uppercase tracking-wider text-white disabled:opacity-50";
 
 export function AdminDashboard() {
   const [active, setActive] = useState("Overview");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Customer state
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [customerLoading, setCustomerLoading] = useState(true);
-  const [customerError, setCustomerError] = useState("");
-  const [showCustomerForm, setShowCustomerForm] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [events, setEvents] = useState<StudioEvent[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const [customerForm, setCustomerForm] = useState(false);
+  const [projectForm, setProjectForm] = useState(false);
+  const [paymentForm, setPaymentForm] = useState(false);
+  const [expenseForm, setExpenseForm] = useState(false);
+  const [assignmentForm, setAssignmentForm] = useState(false);
+
   const [customerName, setCustomerName] = useState("");
   const [customerMobile, setCustomerMobile] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
   const [customerNotes, setCustomerNotes] = useState("");
-  const [savingCustomer, setSavingCustomer] = useState(false);
 
-  // Project state
-  const [projects, setProjects] = useState<BookingProject[]>([]);
-  const [projectLoading, setProjectLoading] = useState(true);
-  const [projectError, setProjectError] = useState("");
-  const [showProjectForm, setShowProjectForm] = useState(false);
-  const [savingProject, setSavingProject] = useState(false);
-  const [projectSearch, setProjectSearch] = useState("");
-
-  // New project form fields
   const [selectedCustomer, setSelectedCustomer] = useState("");
   const [projectName, setProjectName] = useState("");
   const [eventType, setEventType] = useState("Wedding");
-  const [eventDate, setEventDate] = useState("");
-  const [venue, setVenue] = useState("");
-  const [reportingTime, setReportingTime] = useState("09:00");
   const [packageName, setPackageName] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
   const [projectStatus, setProjectStatus] = useState("enquiry");
   const [projectNotes, setProjectNotes] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("");
+  const [venue, setVenue] = useState("");
 
-  const [query, setQuery] = useState("");
-
-  // Payment state
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [paymentLoading, setPaymentLoading] = useState(true);
-  const [paymentError, setPaymentError] = useState("");
-  const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [savingPayment, setSavingPayment] = useState(false);
-  const [paymentSearch, setPaymentSearch] = useState("");
-  const [paymentProjectId, setPaymentProjectId] = useState("");
+  const [paymentProject, setPaymentProject] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("UPI");
   const [paymentReference, setPaymentReference] = useState("");
-  const [paymentDate, setPaymentDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [paymentDate, setPaymentDate] = useState(today());
   const [paymentNotes, setPaymentNotes] = useState("");
 
-  // Load customers and projects
-  useEffect(() => {
-    async function loadCustomers() {
-      const { data, error } = await supabase
+  const [expenseName, setExpenseName] = useState("");
+  const [expenseProject, setExpenseProject] = useState("");
+  const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseDate, setExpenseDate] = useState(today());
+  const [expenseNotes, setExpenseNotes] = useState("");
+
+  const [assignmentEvent, setAssignmentEvent] = useState("");
+  const [assignmentStaff, setAssignmentStaff] = useState("");
+  const [assignmentRole, setAssignmentRole] = useState("Photographer");
+  const [assignmentPayment, setAssignmentPayment] = useState("");
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    const results = await Promise.all([
+      supabase
         .from("customers")
-        .select("id, full_name, mobile, email, address, notes")
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        setCustomerError(error.message);
-      } else {
-        setCustomers(data ?? []);
-      }
-
-      setCustomerLoading(false);
-    }
-
-    async function loadProjects() {
-      const { data, error } = await supabase
+        .select("id,full_name,mobile,email,address,notes")
+        .order("created_at", { ascending: false }),
+      supabase
         .from("projects")
         .select(
-          "id, customer_id, project_name, event_type, package_name, total_amount, status, notes"
+          "id,customer_id,project_name,event_type,package_name,total_amount,status,notes"
         )
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        setProjectError(error.message);
-        setProjectLoading(false);
-        return;
-      }
-
-      const { data: eventData, error: eventError } = await supabase
+        .order("created_at", { ascending: false }),
+      supabase
         .from("events")
-        .select("project_id, event_date, venue, reporting_time");
-
-      if (eventError) {
-        setProjectError(eventError.message);
-      }
-
-      const eventRows = eventData ?? [];
-
-      const mappedProjects = (data ?? []).map((project) => {
-        const eventInfo = eventRows.find(
-          (item) => item.project_id === project.id
-        );
-
-        return {
-          ...project,
-          total_amount: Number(project.total_amount ?? 0),
-          customer_name:
-            customers.find((customer) => customer.id === project.customer_id)
-              ?.full_name ?? "",
-          event_date: eventInfo?.event_date ?? "",
-          venue: eventInfo?.venue ?? "",
-          reporting_time: eventInfo?.reporting_time ?? "",
-        };
-      });
-
-      setProjects(mappedProjects);
-      setProjectLoading(false);
-    }
-
-    loadCustomers();
-    loadProjects();
-  }, [customers.length === 0 ? "initial" : "loaded"]);
-
-  // Load payment history
-  useEffect(() => {
-    async function loadPayments() {
-      const { data, error } = await supabase
+        .select(
+          "id,project_id,event_name,event_date,start_time,end_time,venue,reporting_time"
+        )
+        .order("event_date", { ascending: true }),
+      supabase
         .from("payments")
         .select(
-          "id, project_id, amount, payment_method, transaction_reference, payment_date, notes"
+          "id,project_id,amount,payment_method,transaction_reference,payment_date,notes"
         )
-        .order("payment_date", { ascending: false });
+        .order("payment_date", { ascending: false }),
+      supabase
+        .from("expenses")
+        .select("id,project_id,expense_name,amount,expense_date,notes")
+        .order("expense_date", { ascending: false }),
+      supabase
+        .from("profiles")
+        .select("id,full_name,mobile,role,customer_id")
+        .order("full_name"),
+      supabase
+        .from("staff_assignments")
+        .select(
+          "id,event_id,staff_id,assignment_role,payment_amount,status"
+        ),
+    ]);
 
-      if (error) {
-        setPaymentError(error.message);
-      } else {
-        setPayments(
-          (data ?? []).map((payment) => ({
-            ...payment,
-            amount: Number(payment.amount ?? 0),
-          }))
-        );
-      }
+    const labels = [
+      "Customers",
+      "Projects",
+      "Events",
+      "Payments",
+      "Expenses",
+      "Profiles",
+      "Staff assignments",
+    ];
 
-      setPaymentLoading(false);
+    const failed = results.find((r) => r.error);
+
+    if (failed?.error) {
+      const index = results.findIndex((r) => r === failed);
+      setError(`${labels[index]}: ${failed.error.message}`);
     }
 
-    loadPayments();
+    const [
+      customerResult,
+      projectResult,
+      eventResult,
+      paymentResult,
+      expenseResult,
+      profileResult,
+      assignmentResult,
+    ] = results;
+
+    const customerRows = (customerResult.data ?? []) as Customer[];
+    const projectRows = (projectResult.data ?? []).map((p) => ({
+      ...p,
+      total_amount: Number(p.total_amount ?? 0),
+      customer_name:
+        customerRows.find((c) => c.id === p.customer_id)?.full_name ?? "",
+    })) as Project[];
+
+    setCustomers(customerRows);
+    setProjects(projectRows);
+    setEvents((eventResult.data ?? []) as StudioEvent[]);
+    setPayments(
+      (paymentResult.data ?? []).map((p) => ({
+        ...p,
+        amount: Number(p.amount ?? 0),
+      })) as Payment[]
+    );
+    setExpenses(
+      (expenseResult.data ?? []).map((e) => ({
+        ...e,
+        amount: Number(e.amount ?? 0),
+      })) as Expense[]
+    );
+    setProfiles((profileResult.data ?? []) as Profile[]);
+    setAssignments(
+      (assignmentResult.data ?? []).map((a) => ({
+        ...a,
+        payment_amount: Number(a.payment_amount ?? 0),
+      })) as Assignment[]
+    );
+
+    setLoading(false);
   }, []);
 
-  // Add customer
-  async function addCustomer(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-    if (!customerName.trim() || !customerMobile.trim()) {
-      setCustomerError("Customer name and mobile number are required.");
-      return;
-    }
+  const receivedByProject = useMemo(() => {
+    const map = new Map<string, number>();
+    payments.forEach((p) =>
+      map.set(p.project_id, (map.get(p.project_id) ?? 0) + p.amount)
+    );
+    return map;
+  }, [payments]);
 
-    setSavingCustomer(true);
-    setCustomerError("");
+  const totalBooking = projects.reduce(
+    (sum, p) => sum + p.total_amount,
+    0
+  );
+  const totalReceived = payments.reduce((sum, p) => sum + p.amount, 0);
+  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const outstanding = projects.reduce(
+    (sum, p) =>
+      sum + Math.max(p.total_amount - (receivedByProject.get(p.id) ?? 0), 0),
+    0
+  );
+  const profit = totalReceived - totalExpenses;
 
-    const { data, error } = await supabase
-      .from("customers")
-      .insert({
-        full_name: customerName.trim(),
-        mobile: customerMobile.trim(),
-        email: customerEmail.trim() || null,
-        address: customerAddress.trim() || null,
-        notes: customerNotes.trim() || null,
-      })
-      .select("id, full_name, mobile, email, address, notes")
-      .single();
+  const projectFor = (id: string) =>
+    projects.find((p) => p.id === id);
 
-    if (error) {
-      setCustomerError(error.message);
-    } else {
-      setCustomers((current) => [data, ...current]);
-      setCustomerName("");
-      setCustomerMobile("");
-      setCustomerEmail("");
-      setCustomerAddress("");
-      setCustomerNotes("");
-      setShowCustomerForm(false);
-    }
+  const customerFor = (id: string) =>
+    customers.find((c) => c.id === id);
 
-    setSavingCustomer(false);
+  const eventFor = (id: string) =>
+    events.find((e) => e.id === id);
+
+  const staffFor = (id: string) =>
+    profiles.find((p) => p.id === id);
+
+  function resetForms() {
+    setCustomerName("");
+    setCustomerMobile("");
+    setCustomerEmail("");
+    setCustomerAddress("");
+    setCustomerNotes("");
+    setSelectedCustomer("");
+    setProjectName("");
+    setEventType("Wedding");
+    setPackageName("");
+    setTotalAmount("");
+    setProjectStatus("enquiry");
+    setProjectNotes("");
+    setEventDate("");
+    setStartTime("09:00");
+    setEndTime("");
+    setVenue("");
+    setPaymentProject("");
+    setPaymentAmount("");
+    setPaymentMethod("UPI");
+    setPaymentReference("");
+    setPaymentDate(today());
+    setPaymentNotes("");
+    setExpenseName("");
+    setExpenseProject("");
+    setExpenseAmount("");
+    setExpenseDate(today());
+    setExpenseNotes("");
+    setAssignmentEvent("");
+    setAssignmentStaff("");
+    setAssignmentRole("Photographer");
+    setAssignmentPayment("");
   }
 
-  // Add project and its event
-  async function addProject(e: React.FormEvent<HTMLFormElement>) {
+  async function saveCustomer(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+
+    const { error } = await supabase.from("customers").insert({
+      full_name: customerName.trim(),
+      mobile: customerMobile.trim(),
+      email: customerEmail.trim() || null,
+      address: customerAddress.trim() || null,
+      notes: customerNotes.trim() || null,
+    });
+
+    if (error) setError(error.message);
+    else {
+      setCustomerForm(false);
+      resetForms();
+      await loadData();
+    }
+    setSaving(false);
+  }
+
+  async function saveProject(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (!selectedCustomer || !projectName.trim() || !eventDate) {
-      setProjectError(
-        "Please select a customer, enter a project name and event date."
-      );
+      setError("Choose a customer, enter a project name and event date.");
       return;
     }
 
-    setSavingProject(true);
-    setProjectError("");
+    setSaving(true);
+    setError("");
 
-    const { data: project, error: projectInsertError } = await supabase
+    const { data: project, error: projectError } = await supabase
       .from("projects")
       .insert({
         customer_id: selectedCustomer,
@@ -268,230 +389,215 @@ export function AdminDashboard() {
         status: projectStatus,
         notes: projectNotes.trim() || null,
       })
-      .select(
-        "id, customer_id, project_name, event_type, package_name, total_amount, status, notes"
-      )
+      .select("id")
       .single();
 
-    if (projectInsertError) {
-      setProjectError(projectInsertError.message);
-      setSavingProject(false);
+    if (projectError || !project) {
+      setError(projectError?.message ?? "Project could not be saved.");
+      setSaving(false);
       return;
     }
 
-    const reportingDateTime = `${eventDate}T${reportingTime || "09:00"}:00`;
-
-    const { error: eventInsertError } = await supabase.from("events").insert({
+    const { error: eventError } = await supabase.from("events").insert({
       project_id: project.id,
       event_name: projectName.trim(),
       event_date: eventDate,
+      start_time: startTime || null,
+      end_time: endTime || null,
       venue: venue.trim() || null,
-      reporting_time: reportingDateTime,
+      reporting_time: startTime
+        ? `${eventDate}T${startTime}:00`
+        : null,
     });
 
-    if (eventInsertError) {
-      setProjectError(
-        `The project was saved, but its event details could not be saved: ${eventInsertError.message}`
+    if (eventError) {
+      setError(
+        `Project saved, but event creation failed: ${eventError.message}. Do not submit again; check Projects first.`
       );
-      setSavingProject(false);
+      setSaving(false);
+      await loadData();
       return;
     }
 
-    const customer = customers.find((item) => item.id === selectedCustomer);
-
-    setProjects((current) => [
-      {
-        ...project,
-        total_amount: Number(project.total_amount ?? 0),
-        customer_name: customer?.full_name ?? "",
-        event_date: eventDate,
-        venue,
-        reporting_time: reportingDateTime,
-      },
-      ...current,
-    ]);
-
-    setSelectedCustomer("");
-    setProjectName("");
-    setEventType("Wedding");
-    setEventDate("");
-    setVenue("");
-    setReportingTime("09:00");
-    setPackageName("");
-    setTotalAmount("");
-    setProjectStatus("enquiry");
-    setProjectNotes("");
-    setShowProjectForm(false);
+    setProjectForm(false);
+    resetForms();
+    await loadData();
     setActive("Projects & events");
-    setSavingProject(false);
+    setSaving(false);
   }
 
-  // Record a payment against a project
-  async function addPayment(e: React.FormEvent<HTMLFormElement>) {
+  async function savePayment(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-
     const amount = Number(paymentAmount);
+    const project = projectFor(paymentProject);
 
-    if (
-      !paymentProjectId ||
-      !Number.isFinite(amount) ||
-      amount <= 0 ||
-      !paymentDate
-    ) {
-      setPaymentError(
-        "Select a booking, enter a valid amount and choose a payment date."
-      );
+    if (!project || !Number.isFinite(amount) || amount <= 0) {
+      setError("Select a booking and enter a valid payment amount.");
       return;
     }
 
-    const selectedProject = projects.find(
-      (project) => project.id === paymentProjectId
-    );
-
-    if (!selectedProject) {
-      setPaymentError(
-        "The selected booking could not be found. Refresh and try again."
-      );
-      return;
-    }
-
-    const alreadyReceived = payments
-      .filter((payment) => payment.project_id === paymentProjectId)
-      .reduce((sum, payment) => sum + payment.amount, 0);
-
-    const balance = selectedProject.total_amount - alreadyReceived;
+    const balance =
+      project.total_amount - (receivedByProject.get(project.id) ?? 0);
 
     if (amount > balance) {
-      setPaymentError(
-        `This amount is greater than the remaining balance of ${money(
-          Math.max(balance, 0)
-        )}.`
-      );
+      setError(`Payment exceeds the remaining balance of ${money(balance)}.`);
       return;
     }
 
-    setSavingPayment(true);
-    setPaymentError("");
+    setSaving(true);
+    setError("");
 
-    const { data, error } = await supabase
-      .from("payments")
-      .insert({
-        project_id: paymentProjectId,
-        amount,
-        payment_method: paymentMethod,
-        transaction_reference: paymentReference.trim() || null,
-        payment_date: new Date(`${paymentDate}T12:00:00`).toISOString(),
-        notes: paymentNotes.trim() || null,
-      })
-      .select(
-        "id, project_id, amount, payment_method, transaction_reference, payment_date, notes"
-      )
-      .single();
+    const { error } = await supabase.from("payments").insert({
+      project_id: paymentProject,
+      amount,
+      payment_method: paymentMethod,
+      transaction_reference: paymentReference.trim() || null,
+      payment_date: new Date(`${paymentDate}T12:00:00`).toISOString(),
+      notes: paymentNotes.trim() || null,
+    });
 
-    if (error) {
-      setPaymentError(error.message);
-      setSavingPayment(false);
-      return;
+    if (error) setError(error.message);
+    else {
+      setPaymentForm(false);
+      resetForms();
+      await loadData();
     }
-
-    setPayments((current) => [
-      { ...data, amount: Number(data.amount ?? 0) },
-      ...current,
-    ]);
-
-    setPaymentProjectId("");
-    setPaymentAmount("");
-    setPaymentMethod("UPI");
-    setPaymentReference("");
-    setPaymentDate(new Date().toISOString().slice(0, 10));
-    setPaymentNotes("");
-    setShowPaymentForm(false);
-    setSavingPayment(false);
+    setSaving(false);
   }
 
-  const paymentTotals = useMemo(() => {
-    const receivedByProject = new Map<string, number>();
+  async function saveExpense(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const amount = Number(expenseAmount);
 
-    for (const payment of payments) {
-      receivedByProject.set(
-        payment.project_id,
-        (receivedByProject.get(payment.project_id) ?? 0) + payment.amount
-      );
+    if (!expenseName.trim() || !Number.isFinite(amount) || amount <= 0) {
+      setError("Enter an expense name and a valid amount.");
+      return;
     }
 
-    const totalReceived = payments.reduce(
-      (sum, payment) => sum + payment.amount,
-      0
-    );
+    setSaving(true);
+    setError("");
 
-    const totalBalance = projects.reduce(
-      (sum, project) =>
-        sum +
-        Math.max(
-          project.total_amount - (receivedByProject.get(project.id) ?? 0),
-          0
-        ),
-      0
-    );
-
-    return { receivedByProject, totalReceived, totalBalance };
-  }, [payments, projects]);
-
-  const filteredPayments = useMemo(() => {
-    const search = paymentSearch.toLowerCase();
-
-    return payments.filter((payment) => {
-      const project = projects.find(
-        (item) => item.id === payment.project_id
-      );
-
-      return [
-        project?.project_name ?? "",
-        project?.customer_name ?? "",
-        payment.payment_method ?? "",
-        payment.transaction_reference ?? "",
-        payment.notes ?? "",
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(search);
+    const { error } = await supabase.from("expenses").insert({
+      project_id: expenseProject || null,
+      expense_name: expenseName.trim(),
+      amount,
+      expense_date: expenseDate || today(),
+      notes: expenseNotes.trim() || null,
     });
-  }, [payments, projects, paymentSearch]);
 
-  const filteredProjects = useMemo(() => {
-    const search = projectSearch.toLowerCase();
+    if (error) setError(error.message);
+    else {
+      setExpenseForm(false);
+      resetForms();
+      await loadData();
+    }
+    setSaving(false);
+  }
 
-    return projects.filter((project) =>
-      [
-        project.project_name,
-        project.customer_name ?? "",
-        project.event_type,
-        project.venue ?? "",
-        project.status,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(search)
-    );
-  }, [projects, projectSearch]);
+  async function saveAssignment(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
 
-  const totalValue = projects.reduce(
-    (sum, project) => sum + project.total_amount,
-    0
-  );
+    if (!assignmentEvent || !assignmentStaff) {
+      setError("Choose an event and a staff member.");
+      return;
+    }
 
-  const filteredCustomers = customers.filter((customer) =>
-    [customer.full_name, customer.mobile, customer.email ?? ""]
+    setSaving(true);
+    setError("");
+
+    const { error } = await supabase.from("staff_assignments").insert({
+      event_id: assignmentEvent,
+      staff_id: assignmentStaff,
+      assignment_role: assignmentRole,
+      payment_amount: Number(assignmentPayment) || 0,
+      status: "assigned",
+    });
+
+    if (error) setError(error.message);
+    else {
+      setAssignmentForm(false);
+      resetForms();
+      await loadData();
+    }
+    setSaving(false);
+  }
+
+  async function updateAssignmentStatus(
+    id: string,
+    status: string
+  ) {
+    setError("");
+    const { error } = await supabase
+      .from("staff_assignments")
+      .update({ status })
+      .eq("id", id);
+
+    if (error) setError(error.message);
+    else await loadData();
+  }
+
+  async function updateProjectStatus(id: string, status: string) {
+    setError("");
+    const { error } = await supabase
+      .from("projects")
+      .update({ status })
+      .eq("id", id);
+
+    if (error) setError(error.message);
+    else await loadData();
+  }
+
+  const filteredCustomers = customers.filter((c) =>
+    [c.full_name, c.mobile, c.email ?? ""]
       .join(" ")
       .toLowerCase()
-      .includes(query.toLowerCase())
+      .includes(search.toLowerCase())
   );
+
+  const filteredProjects = projects.filter((p) =>
+    [
+      p.project_name,
+      p.customer_name ?? "",
+      p.event_type ?? "",
+      p.status,
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(search.toLowerCase())
+  );
+
+  const filteredPayments = payments.filter((p) => {
+    const project = projectFor(p.project_id);
+    return [
+      project?.project_name ?? "",
+      project?.customer_name ?? "",
+      p.payment_method ?? "",
+      p.transaction_reference ?? "",
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(search.toLowerCase());
+  });
+
+  const filteredExpenses = expenses.filter((e) =>
+    [
+      e.expense_name,
+      e.notes ?? "",
+      projectFor(e.project_id ?? "")?.project_name ?? "",
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(search.toLowerCase())
+  );
+
+  const pageTitle =
+    active === "Overview" ? "Studio Dashboard" : active;
 
   return (
     <div className="min-h-screen bg-[#f6f4ef] text-[#22231f]">
-      <div className="border-b border-[#e6e1d8] bg-[#fbfaf7] px-5 py-3 text-center text-[10px] font-semibold uppercase tracking-[.22em] text-[#8b7658]">
+      <header className="border-b border-[#e6e1d8] bg-[#fbfaf7] px-5 py-3 text-center text-[10px] font-semibold uppercase tracking-[.22em] text-[#8b7658]">
         Chirag Photography · Studio Management
-      </div>
+      </header>
 
       <div className="mx-auto flex max-w-[1600px]">
         <aside className="hidden min-h-[calc(100vh-44px)] w-[250px] shrink-0 border-r border-[#e7e2d9] bg-[#f1eee8] px-5 py-7 lg:block">
@@ -509,20 +615,24 @@ export function AdminDashboard() {
           </div>
 
           <nav className="space-y-1">
-            {nav.map((item) => (
+            {nav.map(([label, icon]) => (
               <button
-                key={item.label}
-                onClick={() => setActive(item.label)}
+                key={label}
+                onClick={() => {
+                  setActive(label);
+                  setSearch("");
+                  setError("");
+                }}
                 className={`flex w-full items-center gap-3 rounded-sm px-3 py-3 text-left text-[12px] transition ${
-                  active === item.label
+                  active === label
                     ? "bg-[#292a25] text-white shadow-sm"
                     : "text-[#625f58] hover:bg-white/70"
                 }`}
               >
                 <span className="w-5 text-center text-[15px]">
-                  {item.icon}
+                  {icon}
                 </span>
-                {item.label}
+                {label}
               </button>
             ))}
           </nav>
@@ -544,873 +654,774 @@ export function AdminDashboard() {
                 Chirag Photography / Workspace
               </div>
               <h1 className="font-serif text-[36px] leading-none sm:text-[44px]">
-                {active === "Overview" ? "Studio Dashboard" : active}
+                {pageTitle}
               </h1>
               <p className="mt-2 text-[12px] text-[#827c72]">
                 Manage your customers, bookings and studio operations.
               </p>
             </div>
 
-            {active === "Projects & events" && (
+            <div className="flex flex-wrap gap-2">
+              {active === "Customers" && (
+                <button
+                  className={buttonClass}
+                  onClick={() => setCustomerForm(true)}
+                >
+                  + Add Customer
+                </button>
+              )}
+              {active === "Projects & events" && (
+                <button
+                  className={buttonClass}
+                  onClick={() => setProjectForm(true)}
+                >
+                  + New Booking
+                </button>
+              )}
+              {active === "Payments" && (
+                <button
+                  className={buttonClass}
+                  onClick={() => setPaymentForm(true)}
+                  disabled={!projects.length}
+                >
+                  + Record Payment
+                </button>
+              )}
+              {active === "Expenses" && (
+                <button
+                  className={buttonClass}
+                  onClick={() => setExpenseForm(true)}
+                >
+                  + Add Expense
+                </button>
+              )}
+              {active === "Team & assignments" && (
+                <button
+                  className={buttonClass}
+                  onClick={() => setAssignmentForm(true)}
+                  disabled={!events.length || !profiles.length}
+                >
+                  + Assign Staff
+                </button>
+              )}
               <button
-                onClick={() => {
-                  setProjectError("");
-                  setShowProjectForm(true);
-                }}
-                className="rounded-sm bg-[#292a25] px-4 py-3 text-[10px] font-semibold uppercase tracking-[.12em] text-white"
+                className="border border-[#d8d1c6] px-4 py-3 text-xs"
+                onClick={loadData}
               >
-                + New Booking
+                Refresh
               </button>
-            )}
-
-            {active === "Payments" && (
-              <button
-                onClick={() => {
-                  setPaymentError("");
-                  setShowPaymentForm(true);
-                }}
-                disabled={projects.length === 0}
-                className="rounded-sm bg-[#292a25] px-4 py-3 text-[10px] font-semibold uppercase tracking-[.12em] text-white disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                + Record Payment
-              </button>
-            )}
-
-            {active === "Customers" && (
-              <button
-                onClick={() => {
-                  setCustomerError("");
-                  setShowCustomerForm(true);
-                }}
-                className="rounded-sm bg-[#292a25] px-4 py-3 text-[10px] font-semibold uppercase tracking-[.12em] text-white"
-              >
-                + Add Customer
-              </button>
-            )}
+            </div>
           </div>
 
-          {active === "Overview" && (
+          {error && (
+            <div className="mb-5 border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {loading ? (
+            <div className="border border-[#e6e1d8] bg-white p-8 text-sm text-[#827c72]">
+              Loading studio records...
+            </div>
+          ) : (
             <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div className="border border-[#e6e1d8] bg-[#fbfaf7] p-5">
-                  <div className="text-[10px] uppercase tracking-wider text-[#91897e]">
-                    Total Customers
-                  </div>
-                  <div className="mt-3 font-serif text-3xl">
-                    {customers.length}
-                  </div>
-                </div>
-
-                <div className="border border-[#e6e1d8] bg-[#fbfaf7] p-5">
-                  <div className="text-[10px] uppercase tracking-wider text-[#91897e]">
-                    Total Projects
-                  </div>
-                  <div className="mt-3 font-serif text-3xl">
-                    {projects.length}
-                  </div>
-                </div>
-
-                <div className="border border-[#e6e1d8] bg-[#fbfaf7] p-5">
-                  <div className="text-[10px] uppercase tracking-wider text-[#91897e]">
-                    Project Value
-                  </div>
-                  <div className="mt-3 break-words font-serif text-2xl">
-                    {money(totalValue)}
-                  </div>
-                </div>
-              </div>
-
-              <section className="mt-8 border border-[#e6e1d8] bg-[#fbfaf7] p-5">
-                <h2 className="font-serif text-2xl">Recent Projects</h2>
-                {projects.length === 0 ? (
-                  <p className="mt-4 text-sm text-[#827c72]">
-                    No projects have been created yet.
-                  </p>
-                ) : (
-                  <div className="mt-4 space-y-3">
-                    {projects.slice(0, 5).map((project) => (
+              {active === "Overview" && (
+                <>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      ["Customers", customers.length.toString()],
+                      ["Projects", projects.length.toString()],
+                      ["Booking value", money(totalBooking)],
+                      ["Received", money(totalReceived)],
+                      ["Outstanding", money(outstanding)],
+                      ["Expenses", money(totalExpenses)],
+                      ["Net cash position", money(profit)],
+                      ["Upcoming events", events.filter((e) => e.event_date >= today()).length.toString()],
+                    ].map(([label, value]) => (
                       <div
-                        key={project.id}
-                        className="flex flex-wrap justify-between gap-2 border-b border-[#e9e4dc] py-3 text-sm"
+                        key={label}
+                        className="border border-[#e6e1d8] bg-[#fbfaf7] p-5"
                       >
-                        <div>
-                          <div className="font-medium">
-                            {project.project_name}
-                          </div>
-                          <div className="text-xs text-[#827c72]">
-                            {project.customer_name} · {project.event_type}
-                          </div>
+                        <div className="text-[10px] uppercase tracking-wider text-[#91897e]">
+                          {label}
                         </div>
-                        <div className="text-sm">
-                          {money(project.total_amount)}
+                        <div className="mt-3 break-words font-serif text-2xl">
+                          {value}
                         </div>
                       </div>
                     ))}
                   </div>
-                )}
-              </section>
-            </>
-          )}
 
-          {active === "Customers" && (
-            <section className="min-h-[520px] border border-[#e6e1d8] bg-white p-6 sm:p-8">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <h2 className="font-serif text-2xl">Customer Records</h2>
-                  <p className="mt-1 text-sm text-[#827c72]">
-                    Manage your photography studio customers.
-                  </p>
-                </div>
-                <div className="text-sm text-[#827c72]">
-                  Total Customers: {customers.length}
-                </div>
-              </div>
-
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search customers..."
-                className="mt-6 w-full border border-[#e1dbd1] px-3 py-3 text-sm sm:max-w-sm"
-              />
-
-              {customerError && (
-                <p className="mt-4 text-sm text-red-600">{customerError}</p>
-              )}
-
-              {customerLoading ? (
-                <p className="mt-6 text-sm">Loading customers...</p>
-              ) : filteredCustomers.length === 0 ? (
-                <p className="mt-6 text-sm text-[#827c72]">
-                  No customers found.
-                </p>
-              ) : (
-                <div className="mt-6 overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b text-[#827c72]">
-                        <th className="p-3">Name</th>
-                        <th className="p-3">Mobile</th>
-                        <th className="p-3">Email</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredCustomers.map((customer) => (
-                        <tr key={customer.id} className="border-b">
-                          <td className="p-3 font-medium">
-                            {customer.full_name}
-                          </td>
-                          <td className="p-3">{customer.mobile}</td>
-                          <td className="p-3">{customer.email || "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-          )}
-
-          {active === "Projects & events" && (
-            <section className="min-h-[520px] border border-[#e6e1d8] bg-white p-6 sm:p-8">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <h2 className="font-serif text-2xl">Projects & Events</h2>
-                  <p className="mt-1 text-sm text-[#827c72]">
-                    Track bookings, customers and event schedules.
-                  </p>
-                </div>
-                <div className="text-sm text-[#827c72]">
-                  Total Projects: {projects.length}
-                </div>
-              </div>
-
-              <input
-                value={projectSearch}
-                onChange={(e) => setProjectSearch(e.target.value)}
-                placeholder="Search projects..."
-                className="mt-6 w-full border border-[#e1dbd1] px-3 py-3 text-sm sm:max-w-sm"
-              />
-
-              {projectError && (
-                <p className="mt-4 text-sm text-red-600">{projectError}</p>
-              )}
-
-              {projectLoading ? (
-                <p className="mt-6 text-sm">Loading projects...</p>
-              ) : filteredProjects.length === 0 ? (
-                <p className="mt-6 text-sm text-[#827c72]">
-                  No projects found. Click New Booking to create one.
-                </p>
-              ) : (
-                <div className="mt-6 overflow-x-auto">
-                  <table className="w-full min-w-[750px] text-left text-sm">
-                    <thead>
-                      <tr className="border-b text-[#827c72]">
-                        <th className="p-3">Project</th>
-                        <th className="p-3">Customer</th>
-                        <th className="p-3">Event Date</th>
-                        <th className="p-3">Venue</th>
-                        <th className="p-3">Amount</th>
-                        <th className="p-3">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredProjects.map((project) => (
-                        <tr key={project.id} className="border-b">
-                          <td className="p-3 font-medium">
-                            {project.project_name}
+                  <section className="mt-8 border border-[#e6e1d8] bg-[#fbfaf7] p-5">
+                    <h2 className="font-serif text-2xl">Recent Projects</h2>
+                    <div className="mt-4 space-y-3">
+                      {projects.slice(0, 6).map((p) => (
+                        <div
+                          key={p.id}
+                          className="flex flex-wrap justify-between gap-3 border-b border-[#e9e4dc] py-3 text-sm"
+                        >
+                          <div>
+                            <div className="font-medium">{p.project_name}</div>
                             <div className="text-xs text-[#827c72]">
-                              {project.event_type}
+                              {p.customer_name} · {p.event_type}
                             </div>
-                          </td>
-                          <td className="p-3">
-                            {project.customer_name || "—"}
-                          </td>
-                          <td className="p-3">
-                            {project.event_date || "—"}
-                          </td>
-                          <td className="p-3">{project.venue || "—"}</td>
-                          <td className="p-3">
-                            {money(project.total_amount)}
-                          </td>
-                          <td className="p-3">{project.status}</td>
-                        </tr>
+                          </div>
+                          <div className="text-right">
+                            <div>{money(p.total_amount)}</div>
+                            <div className="text-xs text-[#827c72]">
+                              {p.status}
+                            </div>
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                      {!projects.length && (
+                        <p className="text-sm text-[#827c72]">
+                          No projects have been created yet.
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                </>
               )}
-            </section>
-          )}
 
-          {active === "Payments" && (
-            <section className="min-h-[520px] border border-[#e6e1d8] bg-white p-6 sm:p-8">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
+              {active === "Customers" && (
+                <section className="border border-[#e6e1d8] bg-white p-6">
+                  <h2 className="font-serif text-2xl">Customer Records</h2>
+                  <input
+                    className={`${inputClass} max-w-md`}
+                    placeholder="Search customers..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  <div className="mt-5 overflow-x-auto">
+                    <table className="w-full min-w-[650px] text-left text-sm">
+                      <thead>
+                        <tr className="border-b text-[#827c72]">
+                          <th className="p-3">Name</th>
+                          <th className="p-3">Mobile</th>
+                          <th className="p-3">Email</th>
+                          <th className="p-3">Bookings</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredCustomers.map((c) => (
+                          <tr key={c.id} className="border-b">
+                            <td className="p-3 font-medium">{c.full_name}</td>
+                            <td className="p-3">{c.mobile}</td>
+                            <td className="p-3">{c.email || "—"}</td>
+                            <td className="p-3">
+                              {projects.filter((p) => p.customer_id === c.id).length}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {!filteredCustomers.length && (
+                      <p className="py-5 text-sm text-[#827c72]">
+                        No customers found.
+                      </p>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {active === "Projects & events" && (
+                <section className="border border-[#e6e1d8] bg-white p-6">
+                  <h2 className="font-serif text-2xl">Projects & Events</h2>
+                  <input
+                    className={`${inputClass} max-w-md`}
+                    placeholder="Search projects..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  <div className="mt-5 overflow-x-auto">
+                    <table className="w-full min-w-[850px] text-left text-sm">
+                      <thead>
+                        <tr className="border-b text-[#827c72]">
+                          <th className="p-3">Project</th>
+                          <th className="p-3">Customer</th>
+                          <th className="p-3">Event date</th>
+                          <th className="p-3">Venue</th>
+                          <th className="p-3">Amount</th>
+                          <th className="p-3">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredProjects.map((p) => {
+                          const ev = events.find((e) => e.project_id === p.id);
+                          return (
+                            <tr key={p.id} className="border-b">
+                              <td className="p-3 font-medium">
+                                {p.project_name}
+                                <div className="text-xs text-[#827c72]">
+                                  {p.event_type}
+                                </div>
+                              </td>
+                              <td className="p-3">{p.customer_name || "—"}</td>
+                              <td className="p-3">{ev?.event_date || "—"}</td>
+                              <td className="p-3">{ev?.venue || "—"}</td>
+                              <td className="p-3">{money(p.total_amount)}</td>
+                              <td className="p-3">
+                                <select
+                                  className="border bg-white p-2 text-xs"
+                                  value={p.status}
+                                  onChange={(e) =>
+                                    updateProjectStatus(p.id, e.target.value)
+                                  }
+                                >
+                                  {statuses.map((s) => (
+                                    <option key={s} value={s}>{s}</option>
+                                  ))}
+                                </select>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {!filteredProjects.length && (
+                      <p className="py-5 text-sm text-[#827c72]">
+                        No projects found.
+                      </p>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {(active === "Enquiries" || active === "Quotations") && (
+                <section className="border border-[#e6e1d8] bg-white p-6">
+                  <h2 className="font-serif text-2xl">
+                    {active === "Enquiries" ? "Enquiry Tracker" : "Quotation Tracker"}
+                  </h2>
+                  <p className="mt-2 text-sm text-[#827c72]">
+                    {active === "Enquiries"
+                      ? "Projects with enquiry status appear here. Change the status when a quotation is prepared."
+                      : "Projects marked as quoted appear here. Update their status from Projects & Events."}
+                  </p>
+                  <div className="mt-5 overflow-x-auto">
+                    <table className="w-full min-w-[650px] text-left text-sm">
+                      <thead>
+                        <tr className="border-b text-[#827c72]">
+                          <th className="p-3">Project</th>
+                          <th className="p-3">Customer</th>
+                          <th className="p-3">Package</th>
+                          <th className="p-3">Amount</th>
+                          <th className="p-3">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {projects
+                          .filter((p) =>
+                            active === "Enquiries"
+                              ? p.status === "enquiry"
+                              : p.status === "quoted"
+                          )
+                          .map((p) => (
+                            <tr key={p.id} className="border-b">
+                              <td className="p-3">{p.project_name}</td>
+                              <td className="p-3">{p.customer_name}</td>
+                              <td className="p-3">{p.package_name || "—"}</td>
+                              <td className="p-3">{money(p.total_amount)}</td>
+                              <td className="p-3">{p.status}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              {active === "Payments" && (
+                <section className="border border-[#e6e1d8] bg-white p-6">
                   <h2 className="font-serif text-2xl">Payments & Balances</h2>
                   <p className="mt-1 text-sm text-[#827c72]">
                     Record customer payments and track outstanding booking balances.
                   </p>
-                </div>
-                <div className="text-sm text-[#827c72]">
-                  {payments.length} payment{payments.length === 1 ? "" : "s"} recorded
-                </div>
-              </div>
+                  <div className="mt-5 grid gap-4 sm:grid-cols-3">
+                    {[
+                      ["Booking value", money(totalBooking)],
+                      ["Total received", money(totalReceived)],
+                      ["Outstanding", money(outstanding)],
+                    ].map(([label, value]) => (
+                      <div key={label} className="border border-[#e6e1d8] p-5">
+                        <div className="text-[10px] uppercase text-[#91897e]">{label}</div>
+                        <div className="mt-3 font-serif text-2xl">{value}</div>
+                      </div>
+                    ))}
+                  </div>
 
-              <div className="mt-6 grid gap-4 sm:grid-cols-3">
-                <div className="border border-[#e6e1d8] bg-[#fbfaf7] p-5">
-                  <div className="text-[10px] uppercase tracking-wider text-[#91897e]">
-                    Total Booking Value
+                  <h3 className="mt-8 font-serif text-xl">Booking balances</h3>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full min-w-[650px] text-left text-sm">
+                      <thead>
+                        <tr className="border-b text-[#827c72]">
+                          <th className="p-3">Project</th>
+                          <th className="p-3">Customer</th>
+                          <th className="p-3">Booking</th>
+                          <th className="p-3">Received</th>
+                          <th className="p-3">Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {projects.map((p) => {
+                          const received = receivedByProject.get(p.id) ?? 0;
+                          return (
+                            <tr key={p.id} className="border-b">
+                              <td className="p-3">{p.project_name}</td>
+                              <td className="p-3">{p.customer_name}</td>
+                              <td className="p-3">{money(p.total_amount)}</td>
+                              <td className="p-3">{money(received)}</td>
+                              <td className="p-3">{money(Math.max(p.total_amount - received, 0))}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="mt-3 font-serif text-2xl">
-                    {money(totalValue)}
-                  </div>
-                </div>
 
-                <div className="border border-[#e6e1d8] bg-[#fbfaf7] p-5">
-                  <div className="text-[10px] uppercase tracking-wider text-[#91897e]">
-                    Total Received
+                  <h3 className="mt-8 font-serif text-xl">Payment history</h3>
+                  <input
+                    className={`${inputClass} max-w-md`}
+                    placeholder="Search payments..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full min-w-[700px] text-left text-sm">
+                      <thead>
+                        <tr className="border-b text-[#827c72]">
+                          <th className="p-3">Date</th>
+                          <th className="p-3">Project</th>
+                          <th className="p-3">Customer</th>
+                          <th className="p-3">Method</th>
+                          <th className="p-3">Reference</th>
+                          <th className="p-3">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredPayments.map((p) => {
+                          const project = projectFor(p.project_id);
+                          return (
+                            <tr key={p.id} className="border-b">
+                              <td className="p-3">
+                                {p.payment_date
+                                  ? new Date(p.payment_date).toLocaleDateString("en-IN")
+                                  : "—"}
+                              </td>
+                              <td className="p-3">{project?.project_name || "—"}</td>
+                              <td className="p-3">{project?.customer_name || "—"}</td>
+                              <td className="p-3">{p.payment_method || "—"}</td>
+                              <td className="p-3">{p.transaction_reference || "—"}</td>
+                              <td className="p-3">{money(p.amount)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="mt-3 font-serif text-2xl">
-                    {money(paymentTotals.totalReceived)}
-                  </div>
-                </div>
-
-                <div className="border border-[#e6e1d8] bg-[#fbfaf7] p-5">
-                  <div className="text-[10px] uppercase tracking-wider text-[#91897e]">
-                    Outstanding Balance
-                  </div>
-                  <div className="mt-3 font-serif text-2xl">
-                    {money(paymentTotals.totalBalance)}
-                  </div>
-                </div>
-              </div>
-
-              {paymentError && (
-                <p className="mt-4 text-sm text-red-600">{paymentError}</p>
+                </section>
               )}
 
-              <h3 className="mt-8 font-serif text-xl">Booking balances</h3>
+              {active === "Expenses" && (
+                <section className="border border-[#e6e1d8] bg-white p-6">
+                  <h2 className="font-serif text-2xl">Studio Expenses</h2>
+                  <div className="mt-5 grid gap-4 sm:grid-cols-3">
+                    <div className="border p-5">
+                      <div className="text-[10px] uppercase text-[#91897e]">Total expenses</div>
+                      <div className="mt-3 font-serif text-2xl">{money(totalExpenses)}</div>
+                    </div>
+                    <div className="border p-5">
+                      <div className="text-[10px] uppercase text-[#91897e]">Total received</div>
+                      <div className="mt-3 font-serif text-2xl">{money(totalReceived)}</div>
+                    </div>
+                    <div className="border p-5">
+                      <div className="text-[10px] uppercase text-[#91897e]">Net cash position</div>
+                      <div className="mt-3 font-serif text-2xl">{money(profit)}</div>
+                    </div>
+                  </div>
+                  <input
+                    className={`${inputClass} max-w-md`}
+                    placeholder="Search expenses..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="w-full min-w-[650px] text-left text-sm">
+                      <thead>
+                        <tr className="border-b text-[#827c72]">
+                          <th className="p-3">Date</th>
+                          <th className="p-3">Expense</th>
+                          <th className="p-3">Project</th>
+                          <th className="p-3">Notes</th>
+                          <th className="p-3">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredExpenses.map((e) => (
+                          <tr key={e.id} className="border-b">
+                            <td className="p-3">{e.expense_date || "—"}</td>
+                            <td className="p-3">{e.expense_name}</td>
+                            <td className="p-3">{projectFor(e.project_id ?? "")?.project_name || "Studio"}</td>
+                            <td className="p-3">{e.notes || "—"}</td>
+                            <td className="p-3">{money(e.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
 
-              {projectLoading ? (
-                <p className="mt-4 text-sm text-[#827c72]">
-                  Loading bookings...
-                </p>
-              ) : projects.length === 0 ? (
-                <p className="mt-4 text-sm text-[#827c72]">
-                  Create a booking before recording a payment.
-                </p>
-              ) : (
-                <div className="mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[650px] text-left text-sm">
-                    <thead>
-                      <tr className="border-b text-[#827c72]">
-                        <th className="p-3">Project</th>
-                        <th className="p-3">Customer</th>
-                        <th className="p-3">Booking Amount</th>
-                        <th className="p-3">Received</th>
-                        <th className="p-3">Balance</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {projects.map((project) => {
-                        const received =
-                          paymentTotals.receivedByProject.get(project.id) ?? 0;
-                        const balance = Math.max(
-                          project.total_amount - received,
-                          0
-                        );
+              {active === "Team & assignments" && (
+                <section className="border border-[#e6e1d8] bg-white p-6">
+                  <h2 className="font-serif text-2xl">Team & Assignments</h2>
+                  <p className="mt-2 text-sm text-[#827c72]">
+                    Staff members are loaded from profiles. Their profile IDs must belong to existing authenticated users.
+                  </p>
+                  <h3 className="mt-6 font-serif text-xl">Studio team</h3>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b text-[#827c72]">
+                          <th className="p-3">Name</th>
+                          <th className="p-3">Mobile</th>
+                          <th className="p-3">Role</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {profiles.filter((p) => p.role !== "customer").map((p) => (
+                          <tr key={p.id} className="border-b">
+                            <td className="p-3">{p.full_name}</td>
+                            <td className="p-3">{p.mobile || "—"}</td>
+                            <td className="p-3">{p.role}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-                        return (
-                          <tr key={project.id} className="border-b">
-                            <td className="p-3 font-medium">
-                              {project.project_name}
-                            </td>
+                  <h3 className="mt-8 font-serif text-xl">Event assignments</h3>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full min-w-[700px] text-left text-sm">
+                      <thead>
+                        <tr className="border-b text-[#827c72]">
+                          <th className="p-3">Event</th>
+                          <th className="p-3">Staff</th>
+                          <th className="p-3">Assignment</th>
+                          <th className="p-3">Payment</th>
+                          <th className="p-3">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {assignments.map((a) => (
+                          <tr key={a.id} className="border-b">
+                            <td className="p-3">{eventFor(a.event_id)?.event_name || "—"}</td>
+                            <td className="p-3">{staffFor(a.staff_id)?.full_name || "—"}</td>
+                            <td className="p-3">{a.assignment_role || "—"}</td>
+                            <td className="p-3">{money(a.payment_amount)}</td>
                             <td className="p-3">
-                              {project.customer_name || "—"}
-                            </td>
-                            <td className="p-3">
-                              {money(project.total_amount)}
-                            </td>
-                            <td className="p-3">{money(received)}</td>
-                            <td className="p-3 font-medium">
-                              {money(balance)}
+                              <select
+                                className="border p-2 text-xs"
+                                value={a.status}
+                                onChange={(e) => updateAssignmentStatus(a.id, e.target.value)}
+                              >
+                                {["assigned", "accepted", "completed", "cancelled"].map((s) => (
+                                  <option key={s} value={s}>{s}</option>
+                                ))}
+                              </select>
                             </td>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
               )}
 
-              <div className="mt-9 flex flex-wrap items-center justify-between gap-3">
-                <h3 className="font-serif text-xl">Payment history</h3>
-                <input
-                  value={paymentSearch}
-                  onChange={(e) => setPaymentSearch(e.target.value)}
-                  placeholder="Search payments..."
-                  className="w-full border border-[#e1dbd1] px-3 py-3 text-sm sm:max-w-sm"
-                />
-              </div>
-
-              {paymentLoading ? (
-                <p className="mt-4 text-sm text-[#827c72]">
-                  Loading payments...
-                </p>
-              ) : filteredPayments.length === 0 ? (
-                <p className="mt-4 text-sm text-[#827c72]">
-                  No payments found yet.
-                </p>
-              ) : (
-                <div className="mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[700px] text-left text-sm">
-                    <thead>
-                      <tr className="border-b text-[#827c72]">
-                        <th className="p-3">Date</th>
-                        <th className="p-3">Project</th>
-                        <th className="p-3">Customer</th>
-                        <th className="p-3">Method</th>
-                        <th className="p-3">Reference</th>
-                        <th className="p-3">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredPayments.map((payment) => {
-                        const project = projects.find(
-                          (item) => item.id === payment.project_id
-                        );
-
-                        return (
-                          <tr key={payment.id} className="border-b">
-                            <td className="p-3">
-                              {payment.payment_date
-                                ? new Date(
-                                    payment.payment_date
-                                  ).toLocaleDateString("en-IN")
-                                : "—"}
-                            </td>
-                            <td className="p-3">
-                              {project?.project_name ?? "—"}
-                            </td>
-                            <td className="p-3">
-                              {project?.customer_name ?? "—"}
-                            </td>
-                            <td className="p-3">
-                              {payment.payment_method || "—"}
-                            </td>
-                            <td className="p-3">
-                              {payment.transaction_reference || "—"}
-                            </td>
-                            <td className="p-3 font-medium">
-                              {money(payment.amount)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+              {active === "Calendar" && (
+                <section className="border border-[#e6e1d8] bg-white p-6">
+                  <h2 className="font-serif text-2xl">Event Calendar</h2>
+                  <div className="mt-5 space-y-3">
+                    {events.map((e) => (
+                      <div key={e.id} className="flex flex-wrap justify-between gap-3 border-b py-4">
+                        <div>
+                          <div className="font-medium">{e.event_name}</div>
+                          <div className="text-sm text-[#827c72]">
+                            {projectFor(e.project_id)?.customer_name || "Customer"} · {e.venue || "Venue not added"}
+                          </div>
+                        </div>
+                        <div className="text-right text-sm">
+                          <div>{e.event_date}</div>
+                          <div className="text-[#827c72]">{e.start_time || "Time not set"}</div>
+                        </div>
+                      </div>
+                    ))}
+                    {!events.length && <p className="text-sm text-[#827c72]">No events scheduled.</p>}
+                  </div>
+                </section>
               )}
-            </section>
-          )}
 
-          {![
-            "Overview",
-            "Customers",
-            "Projects & events",
-            "Payments",
-          ].includes(active) && (
-            <section className="min-h-[520px] border border-[#e6e1d8] bg-[#fbfaf7] p-6 sm:p-8">
-              <div className="text-[9px] uppercase tracking-[.2em] text-[#9b8a70]">
-                Chirag Photography / {active}
-              </div>
-              <h2 className="mt-3 font-serif text-[30px]">{active}</h2>
-              <p className="mt-2 text-sm leading-6 text-[#827c72]">
-                This workspace will be connected in the next development phase.
-              </p>
-            </section>
+              {active === "Reports" && (
+                <section className="border border-[#e6e1d8] bg-white p-6">
+                  <h2 className="font-serif text-2xl">Studio Reports</h2>
+                  <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {[
+                      ["Total customers", customers.length.toString()],
+                      ["Total projects", projects.length.toString()],
+                      ["Total booking value", money(totalBooking)],
+                      ["Payments received", money(totalReceived)],
+                      ["Outstanding balances", money(outstanding)],
+                      ["Expenses recorded", money(totalExpenses)],
+                      ["Net cash position", money(profit)],
+                      ["Staff assignment costs", money(assignments.reduce((s, a) => s + a.payment_amount, 0))],
+                    ].map(([label, value]) => (
+                      <div key={label} className="border border-[#e6e1d8] p-5">
+                        <div className="text-[10px] uppercase text-[#91897e]">{label}</div>
+                        <div className="mt-3 font-serif text-2xl">{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-5 text-xs text-[#827c72]">
+                    Net cash position is payments received minus recorded expenses. It is not an accounting profit calculation.
+                  </p>
+                </section>
+              )}
+
+              {active === "Galleries" && (
+                <section className="border border-[#e6e1d8] bg-white p-6">
+                  <h2 className="font-serif text-2xl">Client Galleries</h2>
+                  <p className="mt-3 text-sm leading-6 text-[#827c72]">
+                    Gallery management is not connected yet. Private photo uploads, customer OTP access, download permissions and secure sharing require a Supabase Storage bucket, storage policies and a customer-facing gallery page. No private gallery links are created by this dashboard yet.
+                  </p>
+                </section>
+              )}
+
+              {active === "Settings" && (
+                <section className="border border-[#e6e1d8] bg-white p-6">
+                  <h2 className="font-serif text-2xl">Studio Settings</h2>
+                  <p className="mt-3 text-sm leading-6 text-[#827c72]">
+                    Your current profile records and roles are shown below. User creation and role changes should be handled through a secure server-side administrative process, not directly from this browser page.
+                  </p>
+                  <div className="mt-5 space-y-3">
+                    {profiles.map((p) => (
+                      <div key={p.id} className="flex justify-between border-b py-3 text-sm">
+                        <span>{p.full_name}</span>
+                        <span className="text-[#827c72]">{p.role}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
           )}
         </main>
       </div>
 
-      {/* Add Customer Form */}
-      {showCustomerForm && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center overflow-y-auto bg-black/40 p-4">
-          <form
-            onSubmit={addCustomer}
-            className="my-6 w-full max-w-lg border border-[#e6e1d8] bg-[#fbfaf7] p-6 shadow-2xl"
-          >
-            <div className="flex items-center justify-between">
-              <h2 className="font-serif text-2xl">Add Customer</h2>
-              <button
-                type="button"
-                onClick={() => setShowCustomerForm(false)}
-                className="text-2xl"
-              >
-                ×
-              </button>
-            </div>
-
-            <label className="mt-5 block text-sm">
-              Customer Name *
-              <input
-                required
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                className="mt-2 w-full border p-3"
-                placeholder="Full name"
-              />
-            </label>
-
-            <label className="mt-4 block text-sm">
-              Mobile Number *
-              <input
-                required
-                type="tel"
-                value={customerMobile}
-                onChange={(e) => setCustomerMobile(e.target.value)}
-                className="mt-2 w-full border p-3"
-                placeholder="Mobile number"
-              />
-            </label>
-
-            <label className="mt-4 block text-sm">
-              Email
-              <input
-                type="email"
-                value={customerEmail}
-                onChange={(e) => setCustomerEmail(e.target.value)}
-                className="mt-2 w-full border p-3"
-                placeholder="Email address"
-              />
-            </label>
-
-            <label className="mt-4 block text-sm">
-              Address
-              <input
-                value={customerAddress}
-                onChange={(e) => setCustomerAddress(e.target.value)}
-                className="mt-2 w-full border p-3"
-                placeholder="Customer address"
-              />
-            </label>
-
-            <label className="mt-4 block text-sm">
-              Notes
-              <textarea
-                value={customerNotes}
-                onChange={(e) => setCustomerNotes(e.target.value)}
-                className="mt-2 w-full border p-3"
-                rows={3}
-                placeholder="Additional notes"
-              />
-            </label>
-
-            {customerError && (
-              <p className="mt-3 text-sm text-red-600">{customerError}</p>
-            )}
-
-            <button
-              type="submit"
-              disabled={savingCustomer}
-              className="mt-5 w-full bg-[#292a25] px-5 py-3 text-sm text-white disabled:opacity-50"
-            >
-              {savingCustomer ? "Saving..." : "Save Customer"}
-            </button>
+      {customerForm && (
+        <Modal title="Add Customer" onClose={() => setCustomerForm(false)}>
+          <form onSubmit={saveCustomer} className="space-y-3">
+            <Field label="Customer name *">
+              <input required className={inputClass} value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+            </Field>
+            <Field label="Mobile number *">
+              <input required className={inputClass} value={customerMobile} onChange={(e) => setCustomerMobile(e.target.value)} />
+            </Field>
+            <Field label="Email">
+              <input type="email" className={inputClass} value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+            </Field>
+            <Field label="Address">
+              <input className={inputClass} value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} />
+            </Field>
+            <Field label="Notes">
+              <textarea className={inputClass} rows={3} value={customerNotes} onChange={(e) => setCustomerNotes(e.target.value)} />
+            </Field>
+            <button disabled={saving} className={`${buttonClass} w-full`}>{saving ? "Saving..." : "Save Customer"}</button>
           </form>
-        </div>
+        </Modal>
       )}
 
-      {/* New Project Form */}
-      {showProjectForm && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center overflow-y-auto bg-black/40 p-4">
-          <form
-            onSubmit={addProject}
-            className="my-6 w-full max-w-2xl border border-[#e6e1d8] bg-[#fbfaf7] p-6 shadow-2xl"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-[9px] uppercase tracking-[.2em] text-[#9b8a70]">
-                  Project intake
-                </div>
-                <h2 className="mt-2 font-serif text-2xl">New Booking</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowProjectForm(false)}
-                className="text-2xl"
-              >
-                ×
-              </button>
+      {projectForm && (
+        <Modal title="New Booking" onClose={() => setProjectForm(false)}>
+          <form onSubmit={saveProject} className="space-y-3">
+            <Field label="Customer *">
+              <select required className={inputClass} value={selectedCustomer} onChange={(e) => setSelectedCustomer(e.target.value)}>
+                <option value="">Choose customer</option>
+                {customers.map((c) => <option key={c.id} value={c.id}>{c.full_name} — {c.mobile}</option>)}
+              </select>
+            </Field>
+            <Field label="Project name *">
+              <input required className={inputClass} value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="Example: Rahul Wedding" />
+            </Field>
+            <Field label="Event type">
+              <select className={inputClass} value={eventType} onChange={(e) => setEventType(e.target.value)}>
+                {["Wedding", "Engagement", "Reception", "Birthday", "Baby shower", "Pre-wedding", "Maternity", "Corporate", "Other"].map((v) => <option key={v}>{v}</option>)}
+              </select>
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Event date *">
+                <input required type="date" className={inputClass} value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
+              </Field>
+              <Field label="Reporting time">
+                <input type="time" className={inputClass} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+              </Field>
+              <Field label="End time">
+                <input type="time" className={inputClass} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+              </Field>
+              <Field label="Package">
+                <input className={inputClass} value={packageName} onChange={(e) => setPackageName(e.target.value)} placeholder="Gold / Platinum" />
+              </Field>
             </div>
-
-            {customers.length === 0 ? (
-              <p className="mt-5 text-sm text-red-600">
-                Please add a customer before creating a booking.
-              </p>
-            ) : (
-              <>
-                <label className="mt-5 block text-sm">
-                  Select Customer *
-                  <select
-                    required
-                    value={selectedCustomer}
-                    onChange={(e) => setSelectedCustomer(e.target.value)}
-                    className="mt-2 w-full border bg-white p-3"
-                  >
-                    <option value="">Choose a customer</option>
-                    {customers.map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.full_name} — {customer.mobile}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="mt-4 block text-sm">
-                  Project / Booking Name *
-                  <input
-                    required
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    className="mt-2 w-full border p-3"
-                    placeholder="Example: Rahul Wedding"
-                  />
-                </label>
-
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <label className="block text-sm">
-                    Event Type
-                    <select
-                      value={eventType}
-                      onChange={(e) => setEventType(e.target.value)}
-                      className="mt-2 w-full border bg-white p-3"
-                    >
-                      <option>Wedding</option>
-                      <option>Engagement</option>
-                      <option>Reception</option>
-                      <option>Birthday</option>
-                      <option>Baby shower</option>
-                      <option>Pre-wedding</option>
-                      <option>Maternity</option>
-                      <option>Corporate</option>
-                      <option>Other</option>
-                    </select>
-                  </label>
-
-                  <label className="block text-sm">
-                    Event Date *
-                    <input
-                      required
-                      type="date"
-                      value={eventDate}
-                      onChange={(e) => setEventDate(e.target.value)}
-                      className="mt-2 w-full border bg-white p-3"
-                    />
-                  </label>
-
-                  <label className="block text-sm">
-                    Reporting Time
-                    <input
-                      type="time"
-                      value={reportingTime}
-                      onChange={(e) => setReportingTime(e.target.value)}
-                      className="mt-2 w-full border bg-white p-3"
-                    />
-                  </label>
-
-                  <label className="block text-sm">
-                    Package Name
-                    <input
-                      value={packageName}
-                      onChange={(e) => setPackageName(e.target.value)}
-                      className="mt-2 w-full border p-3"
-                      placeholder="Gold / Platinum / Premium"
-                    />
-                  </label>
-                </div>
-
-                <label className="mt-4 block text-sm">
-                  Venue
-                  <input
-                    value={venue}
-                    onChange={(e) => setVenue(e.target.value)}
-                    className="mt-2 w-full border p-3"
-                    placeholder="Event venue and address"
-                  />
-                </label>
-
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <label className="block text-sm">
-                    Total Amount (₹)
-                    <input
-                      type="number"
-                      min="0"
-                      value={totalAmount}
-                      onChange={(e) => setTotalAmount(e.target.value)}
-                      className="mt-2 w-full border p-3"
-                      placeholder="Example: 75000"
-                    />
-                  </label>
-
-                  <label className="block text-sm">
-                    Booking Status
-                    <select
-                      value={projectStatus}
-                      onChange={(e) => setProjectStatus(e.target.value)}
-                      className="mt-2 w-full border bg-white p-3"
-                    >
-                      <option value="enquiry">Enquiry</option>
-                      <option value="quoted">Quoted</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                  </label>
-                </div>
-
-                <label className="mt-4 block text-sm">
-                  Notes
-                  <textarea
-                    value={projectNotes}
-                    onChange={(e) => setProjectNotes(e.target.value)}
-                    className="mt-2 w-full border p-3"
-                    rows={3}
-                    placeholder="Additional booking details"
-                  />
-                </label>
-              </>
-            )}
-
-            {projectError && (
-              <p className="mt-4 text-sm text-red-600">{projectError}</p>
-            )}
-
-            <div className="mt-6 flex gap-3">
-              <button
-                type="button"
-                onClick={() => setShowProjectForm(false)}
-                className="flex-1 border border-[#ddd6cb] px-4 py-3 text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={savingProject || customers.length === 0}
-                className="flex-1 bg-[#292a25] px-4 py-3 text-sm text-white disabled:opacity-50"
-              >
-                {savingProject ? "Saving..." : "Save Booking"}
-              </button>
-            </div>
+            <Field label="Venue">
+              <input className={inputClass} value={venue} onChange={(e) => setVenue(e.target.value)} />
+            </Field>
+            <Field label="Total amount (₹)">
+              <input type="number" min="0" className={inputClass} value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} />
+            </Field>
+            <Field label="Booking status">
+              <select className={inputClass} value={projectStatus} onChange={(e) => setProjectStatus(e.target.value)}>
+                {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </Field>
+            <Field label="Notes">
+              <textarea rows={3} className={inputClass} value={projectNotes} onChange={(e) => setProjectNotes(e.target.value)} />
+            </Field>
+            <button disabled={saving || !customers.length} className={`${buttonClass} w-full`}>{saving ? "Saving..." : "Save Booking"}</button>
+            {!customers.length && <p className="text-xs text-red-600">Add a customer first.</p>}
           </form>
-        </div>
+        </Modal>
       )}
 
-      {/* Record Payment Form */}
-      {showPaymentForm && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center overflow-y-auto bg-black/40 p-4">
-          <form
-            onSubmit={addPayment}
-            className="my-6 w-full max-w-xl border border-[#e6e1d8] bg-[#fbfaf7] p-6 shadow-2xl"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-[9px] uppercase tracking-[.2em] text-[#9b8a70]">
-                  Payment entry
-                </div>
-                <h2 className="mt-2 font-serif text-2xl">Record Payment</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowPaymentForm(false)}
-                className="text-2xl"
-              >
-                ×
-              </button>
-            </div>
-
-            <label className="mt-5 block text-sm">
-              Booking *
-              <select
-                required
-                value={paymentProjectId}
-                onChange={(e) => setPaymentProjectId(e.target.value)}
-                className="mt-2 w-full border bg-white p-3"
-              >
-                <option value="">Choose a booking</option>
-                {projects.map((project) => {
-                  const received =
-                    paymentTotals.receivedByProject.get(project.id) ?? 0;
-                  const balance = Math.max(
-                    project.total_amount - received,
-                    0
-                  );
-
-                  return (
-                    <option key={project.id} value={project.id}>
-                      {project.project_name} — {project.customer_name || "Customer"} — Balance {money(balance)}
-                    </option>
-                  );
+      {paymentForm && (
+        <Modal title="Record Payment" onClose={() => setPaymentForm(false)}>
+          <form onSubmit={savePayment} className="space-y-3">
+            <Field label="Booking *">
+              <select required className={inputClass} value={paymentProject} onChange={(e) => setPaymentProject(e.target.value)}>
+                <option value="">Choose booking</option>
+                {projects.map((p) => {
+                  const balance = Math.max(p.total_amount - (receivedByProject.get(p.id) ?? 0), 0);
+                  return <option key={p.id} value={p.id}>{p.project_name} — Balance {money(balance)}</option>;
                 })}
               </select>
-            </label>
-
-            {paymentProjectId && (
-              <div className="mt-3 border border-[#e6e1d8] bg-white p-3 text-sm">
-                {(() => {
-                  const selected = projects.find(
-                    (project) => project.id === paymentProjectId
-                  );
-                  const received =
-                    paymentTotals.receivedByProject.get(paymentProjectId) ?? 0;
-                  const balance = Math.max(
-                    (selected?.total_amount ?? 0) - received,
-                    0
-                  );
-
-                  return (
-                    <div className="flex flex-wrap justify-between gap-2">
-                      <span>
-                        Booking: {money(selected?.total_amount ?? 0)}
-                      </span>
-                      <span>Received: {money(received)}</span>
-                      <strong>Balance: {money(balance)}</strong>
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <label className="block text-sm">
-                Amount Received (₹) *
-                <input
-                  required
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  className="mt-2 w-full border bg-white p-3"
-                  placeholder="Example: 15000"
-                />
-              </label>
-
-              <label className="block text-sm">
-                Payment Date *
-                <input
-                  required
-                  type="date"
-                  value={paymentDate}
-                  onChange={(e) => setPaymentDate(e.target.value)}
-                  className="mt-2 w-full border bg-white p-3"
-                />
-              </label>
-
-              <label className="block text-sm">
-                Payment Method *
-                <select
-                  required
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="mt-2 w-full border bg-white p-3"
-                >
-                  <option value="UPI">UPI</option>
-                  <option value="Cash">Cash</option>
-                  <option value="Bank Transfer">Bank Transfer</option>
-                  <option value="Card">Card</option>
-                  <option value="Cheque">Cheque</option>
-                  <option value="Other">Other</option>
-                </select>
-              </label>
-
-              <label className="block text-sm">
-                Transaction Reference
-                <input
-                  value={paymentReference}
-                  onChange={(e) => setPaymentReference(e.target.value)}
-                  className="mt-2 w-full border bg-white p-3"
-                  placeholder="UPI / bank reference"
-                />
-              </label>
-            </div>
-
-            <label className="mt-4 block text-sm">
-              Notes
-              <textarea
-                value={paymentNotes}
-                onChange={(e) => setPaymentNotes(e.target.value)}
-                className="mt-2 w-full border bg-white p-3"
-                rows={3}
-                placeholder="Advance, second instalment, final payment..."
-              />
-            </label>
-
-            {paymentError && (
-              <p className="mt-4 text-sm text-red-600">{paymentError}</p>
-            )}
-
-            <div className="mt-6 flex gap-3">
-              <button
-                type="button"
-                onClick={() => setShowPaymentForm(false)}
-                className="flex-1 border border-[#ddd6cb] px-4 py-3 text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={savingPayment || projects.length === 0}
-                className="flex-1 bg-[#292a25] px-4 py-3 text-sm text-white disabled:opacity-50"
-              >
-                {savingPayment ? "Saving..." : "Save Payment"}
-              </button>
-            </div>
+            </Field>
+            <Field label="Amount received (₹) *">
+              <input required type="number" min="0.01" step="0.01" className={inputClass} value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} />
+            </Field>
+            <Field label="Payment date">
+              <input required type="date" className={inputClass} value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
+            </Field>
+            <Field label="Payment method">
+              <select className={inputClass} value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                {["UPI", "Cash", "Bank Transfer", "Card", "Cheque", "Other"].map((m) => <option key={m}>{m}</option>)}
+              </select>
+            </Field>
+            <Field label="Transaction reference">
+              <input className={inputClass} value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} />
+            </Field>
+            <Field label="Notes">
+              <textarea className={inputClass} rows={3} value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} />
+            </Field>
+            <button disabled={saving} className={`${buttonClass} w-full`}>{saving ? "Saving..." : "Save Payment"}</button>
           </form>
-        </div>
+        </Modal>
       )}
+
+      {expenseForm && (
+        <Modal title="Add Expense" onClose={() => setExpenseForm(false)}>
+          <form onSubmit={saveExpense} className="space-y-3">
+            <Field label="Expense name *">
+              <input required className={inputClass} value={expenseName} onChange={(e) => setExpenseName(e.target.value)} placeholder="Travel / equipment / food" />
+            </Field>
+            <Field label="Related project (optional)">
+              <select className={inputClass} value={expenseProject} onChange={(e) => setExpenseProject(e.target.value)}>
+                <option value="">Studio expense</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.project_name}</option>)}
+              </select>
+            </Field>
+            <Field label="Amount (₹) *">
+              <input required type="number" min="0.01" step="0.01" className={inputClass} value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} />
+            </Field>
+            <Field label="Expense date">
+              <input type="date" className={inputClass} value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} />
+            </Field>
+            <Field label="Notes">
+              <textarea className={inputClass} rows={3} value={expenseNotes} onChange={(e) => setExpenseNotes(e.target.value)} />
+            </Field>
+            <button disabled={saving} className={`${buttonClass} w-full`}>{saving ? "Saving..." : "Save Expense"}</button>
+          </form>
+        </Modal>
+      )}
+
+      {assignmentForm && (
+        <Modal title="Assign Staff to Event" onClose={() => setAssignmentForm(false)}>
+          <form onSubmit={saveAssignment} className="space-y-3">
+            <Field label="Event *">
+              <select required className={inputClass} value={assignmentEvent} onChange={(e) => setAssignmentEvent(e.target.value)}>
+                <option value="">Choose event</option>
+                {events.map((e) => <option key={e.id} value={e.id}>{e.event_name} — {e.event_date}</option>)}
+              </select>
+            </Field>
+            <Field label="Staff member *">
+              <select required className={inputClass} value={assignmentStaff} onChange={(e) => setAssignmentStaff(e.target.value)}>
+                <option value="">Choose staff</option>
+                {profiles.filter((p) => ["owner", "admin", "photographer", "editor"].includes(p.role)).map((p) => <option key={p.id} value={p.id}>{p.full_name} — {p.role}</option>)}
+              </select>
+            </Field>
+            <Field label="Assignment role">
+              <select className={inputClass} value={assignmentRole} onChange={(e) => setAssignmentRole(e.target.value)}>
+                {["Photographer", "Videographer", "Editor", "Drone operator", "Assistant", "Other"].map((r) => <option key={r}>{r}</option>)}
+              </select>
+            </Field>
+            <Field label="Staff payment amount (₹)">
+              <input type="number" min="0" className={inputClass} value={assignmentPayment} onChange={(e) => setAssignmentPayment(e.target.value)} />
+            </Field>
+            <button disabled={saving} className={`${buttonClass} w-full`}>{saving ? "Saving..." : "Save Assignment"}</button>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block text-sm">
+      {label}
+      {children}
+    </label>
+  );
+}
+
+function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-[150] flex items-center justify-center overflow-y-auto bg-black/40 p-4">
+      <div className="my-6 w-full max-w-xl border border-[#e6e1d8] bg-[#fbfaf7] p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="font-serif text-2xl">{title}</h2>
+          <button type="button" onClick={onClose} className="text-2xl">×</button>
+        </div>
+        {children}
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-4 w-full border border-[#ddd6cb] px-4 py-3 text-sm"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }
