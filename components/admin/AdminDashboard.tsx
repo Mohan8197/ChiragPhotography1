@@ -265,7 +265,7 @@ export function AdminDashboard() {
     setReportingTime("09:00");
     setPackageName("");
     setTotalAmount("");
-    setProjectStatus("Enquiry");
+    setProjectStatus("enquiry");
     setProjectNotes("");
     setShowProjectForm(false);
     setActive("Projects & events");
