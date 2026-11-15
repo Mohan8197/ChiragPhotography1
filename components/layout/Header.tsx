@@ -101,6 +101,16 @@ export function Header() {
                   </TransitionLink>
                 </Magnetic>
               </li>
+              <li>
+                <Magnetic strength={0.4}>
+                  <TransitionLink
+                    href="/admin/login"
+                    className="label u-link py-2"
+                  >
+                    Login
+                  </TransitionLink>
+                </Magnetic>
+              </li>
             </ul>
           </nav>
 
