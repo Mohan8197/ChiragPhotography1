@@ -73,7 +73,7 @@ export function Header() {
         <div className="container-x flex items-center justify-between py-5 md:py-6">
           <TransitionLink href="/" className="relative z-10 flex items-baseline gap-2" aria-label={`${studio.name} — home`}>
             <span className="font-serif text-[1.625rem] leading-none md:text-[1.875rem]">{studio.shortName}</span>
-            <span className="label hidden sm:inline">Studio</span>
+
           </TransitionLink>
 
           <nav aria-label="Primary" className="hidden md:block">
