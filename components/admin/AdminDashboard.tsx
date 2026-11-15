@@ -50,6 +50,13 @@ export function AdminDashboard() {
   const [customers, setCustomers] = useState<Customer[]>([]);
 const [customerLoading, setCustomerLoading] = useState(true);
 const [customerError, setCustomerError] = useState("");
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
+const [customerName, setCustomerName] = useState("");
+const [customerMobile, setCustomerMobile] = useState("");
+const [customerEmail, setCustomerEmail] = useState("");
+const [customerAddress, setCustomerAddress] = useState("");
+const [customerNotes, setCustomerNotes] = useState("");
+const [savingCustomer, setSavingCustomer] = useState(false);
   const [query, setQuery] = useState("");
   const [projects, setProjects] = useState(initialProjects);
   const [showNew, setShowNew] = useState(false);
@@ -84,7 +91,43 @@ const [customerError, setCustomerError] = useState("");
     setProjects((items) => [{ id: `CP-${String(27 + items.length - initialProjects.length).padStart(3, "0")}`, client: client.trim(), event, date: new Date(date + "T12:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }), venue: "Venue to be confirmed", amount: Number(amount) || 0, paid: 0, status: "Enquiry" }, ...items]);
     setClient(""); setDate(""); setAmount(""); setShowNew(false); setActive("Projects & events");
   }
+async function addCustomer(e: React.FormEvent<HTMLFormElement>) {
+  e.preventDefault();
 
+  if (!customerName.trim() || !customerMobile.trim()) {
+    alert("Customer name and mobile number are required.");
+    return;
+  }
+
+  setSavingCustomer(true);
+  setCustomerError("");
+
+  const { data, error } = await supabase
+    .from("customers")
+    .insert({
+      full_name: customerName.trim(),
+      mobile: customerMobile.trim(),
+      email: customerEmail.trim() || null,
+      address: customerAddress.trim() || null,
+      notes: customerNotes.trim() || null,
+    })
+    .select("id, full_name, mobile, email, address, notes")
+    .single();
+
+  if (error) {
+    setCustomerError(error.message);
+  } else {
+    setCustomers((current) => [data, ...current]);
+    setCustomerName("");
+    setCustomerMobile("");
+    setCustomerEmail("");
+    setCustomerAddress("");
+    setCustomerNotes("");
+    setShowCustomerForm(false);
+  }
+
+  setSavingCustomer(false);
+}
   const total = projects.reduce((sum, p) => sum + p.amount, 0);
   const received = projects.reduce((sum, p) => sum + p.paid, 0);
 
@@ -179,7 +222,8 @@ const [customerError, setCustomerError] = useState("");
           <div className="mt-8 flex flex-wrap justify-between gap-2 border-t border-[#e4ded4] pt-4 text-[9px] uppercase tracking-[.14em] text-[#a0998e]"><span>Chirag Photography · Bengaluru</span><span>Management workspace · Preview build</span></div>
           </>
         ) : active === "Customers" ? (
-      <section className="min-h-[520px] border border-[#e6e1d8] bg-white p-6 sm:p-8">
+      
+<section className="min-h-[520px] border border-[#e6e1d8] bg-white p-6 sm:p-8">
   <div className="flex flex-wrap items-center justify-between gap-4">
     <div>
       <h2 className="font-serif text-2xl">Customer Records</h2>
@@ -187,26 +231,79 @@ const [customerError, setCustomerError] = useState("");
         Manage your photography studio customers.
       </p>
     </div>
-    <div className="text-sm text-[#827c72]">
-      Total Customers: {customers.length}
-    </div>
+    <button
+      type="button"
+      onClick={() => setShowCustomerForm(!showCustomerForm)}
+      className="bg-[#292a25] px-4 py-3 text-xs text-white"
+    >
+      {showCustomerForm ? "Cancel" : "+ Add Customer"}
+    </button>
+  </div>
+
+  {showCustomerForm && (
+    <form onSubmit={addCustomer} className="mt-6 grid gap-4 sm:grid-cols-2">
+      <label className="text-sm">
+        Customer Name *
+        <input required value={customerName}
+          onChange={(e) => setCustomerName(e.target.value)}
+          className="mt-2 w-full border p-3" placeholder="Full name" />
+      </label>
+
+      <label className="text-sm">
+        Mobile Number *
+        <input required type="tel" value={customerMobile}
+          onChange={(e) => setCustomerMobile(e.target.value)}
+          className="mt-2 w-full border p-3" placeholder="Mobile number" />
+      </label>
+
+      <label className="text-sm">
+        Email
+        <input type="email" value={customerEmail}
+          onChange={(e) => setCustomerEmail(e.target.value)}
+          className="mt-2 w-full border p-3" placeholder="Email address" />
+      </label>
+
+      <label className="text-sm">
+        Address
+        <input value={customerAddress}
+          onChange={(e) => setCustomerAddress(e.target.value)}
+          className="mt-2 w-full border p-3" placeholder="Customer address" />
+      </label>
+
+      <label className="text-sm sm:col-span-2">
+        Notes
+        <textarea value={customerNotes}
+          onChange={(e) => setCustomerNotes(e.target.value)}
+          className="mt-2 w-full border p-3" rows={3}
+          placeholder="Additional customer notes" />
+      </label>
+
+      <button type="submit" disabled={savingCustomer}
+        className="bg-[#292a25] px-5 py-3 text-sm text-white disabled:opacity-50 sm:col-span-2">
+        {savingCustomer ? "Saving..." : "Save Customer"}
+      </button>
+    </form>
+  )}
+
+  {customerError && (
+    <p className="mt-4 text-sm text-red-600">{customerError}</p>
+  )}
+
+  <div className="mt-6 text-sm text-[#827c72]">
+    Total Customers: {customers.length}
   </div>
 
   {customerLoading ? (
-    <p className="mt-6 text-sm">Loading customers...</p>
-  ) : customerError ? (
-    <p className="mt-6 text-sm text-red-600">
-      Error: {customerError}
-    </p>
+    <p className="mt-4">Loading customers...</p>
   ) : customers.length === 0 ? (
-    <p className="mt-6 text-sm text-[#827c72]">
+    <p className="mt-4 text-sm text-[#827c72]">
       No customers added yet.
     </p>
   ) : (
-    <div className="mt-6 overflow-x-auto">
+    <div className="mt-4 overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b text-[#827c72]">
+          <tr className="border-b">
             <th className="p-3">Name</th>
             <th className="p-3">Mobile</th>
             <th className="p-3">Email</th>
@@ -215,7 +312,7 @@ const [customerError, setCustomerError] = useState("");
         <tbody>
           {customers.map((customer) => (
             <tr key={customer.id} className="border-b">
-              <td className="p-3 font-medium">{customer.full_name}</td>
+              <td className="p-3">{customer.full_name}</td>
               <td className="p-3">{customer.mobile}</td>
               <td className="p-3">{customer.email || "—"}</td>
             </tr>
@@ -225,6 +322,8 @@ const [customerError, setCustomerError] = useState("");
     </div>
   )}
 </section>
+
+     
       ) : (
             <section className="min-h-[520px] border border-[#e6e1d8] bg-[#fbfaf7] p-6 sm:p-8">
               <div className="text-[9px] uppercase tracking-[.2em] text-[#9b8a70]">Chirag Photography / {active}</div>
