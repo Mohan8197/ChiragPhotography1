@@ -81,7 +81,7 @@ export function AdminDashboard() {
   const [reportingTime, setReportingTime] = useState("09:00");
   const [packageName, setPackageName] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
-  const [projectStatus, setProjectStatus] = useState("Enquiry");
+  const [projectStatus, setProjectStatus] = useState("enquiry");
   const [projectNotes, setProjectNotes] = useState("");
 
   const [query, setQuery] = useState("");
@@ -825,10 +825,12 @@ export function AdminDashboard() {
                       onChange={(e) => setProjectStatus(e.target.value)}
                       className="mt-2 w-full border bg-white p-3"
                     >
-                      <option value="Enquiry">Enquiry</option>
-                      <option value="Confirmed">Confirmed</option>
-                      <option value="Editing">Editing</option>
-                      <option value="Completed">Completed</option>
+                     <option value="enquiry">Enquiry</option>
+<option value="quoted">Quoted</option>
+<option value="confirmed">Confirmed</option>
+<option value="in_progress">In Progress</option>
+<option value="completed">Completed</option>
+<option value="cancelled">Cancelled</option>
                     </select>
                   </label>
                 </div>
