@@ -147,8 +147,8 @@ export function AdminDashboard() {
             </div>
           </div>
           <div className="mt-8 flex flex-wrap justify-between gap-2 border-t border-[#e4ded4] pt-4 text-[9px] uppercase tracking-[.14em] text-[#a0998e]"><span>Chirag Photography · Bengaluru</span><span>Management workspace · Preview build</span></div>
-          ) : (
-            </>
+          </>
+        ) : (  
             <section className="min-h-[520px] border border-[#e6e1d8] bg-[#fbfaf7] p-6 sm:p-8">
               <div className="text-[9px] uppercase tracking-[.2em] text-[#9b8a70]">Chirag Photography / {active}</div>
               <h2 className="mt-3 font-serif text-[30px]"> {active} </h2>
