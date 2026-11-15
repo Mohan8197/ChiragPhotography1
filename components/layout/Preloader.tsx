@@ -98,7 +98,7 @@ export function Preloader() {
             <p data-pre-line className="font-serif text-mega">
               Chirag
               <br />
-              <em className="italic">Vance</em>
+              <em className="italic">Photography</em>
             </p>
           </div>
           <span className="overflow-hidden">
