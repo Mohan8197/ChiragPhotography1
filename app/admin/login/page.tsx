@@ -36,15 +36,15 @@ export default function AdminLoginPage() {
       .eq("id", data.user.id)
       .maybeSingle();
 
-    if (profileError || !profile || !["owner", "admin"].includes(profile.role)) {
+    if (profileError || !profile || !["owner", "admin", "manager", "photographer", "videographer", "editor"].includes(profile.role)) {
       await supabase.auth.signOut();
       setLoading(false);
-      setError("This account does not have Owner or Admin access.");
+      setError("This account does not have an authorised studio role.");
       return;
     }
 
     setLoading(false);
-    router.replace("/admin");
+    router.replace(["owner", "admin"].includes(profile.role) ? "/admin" : "/staff");
   }
 
   return (
