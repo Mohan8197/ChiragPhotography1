@@ -138,6 +138,12 @@ export function AdminDashboard() {
   const [paymentForm, setPaymentForm] = useState(false);
   const [expenseForm, setExpenseForm] = useState(false);
   const [assignmentForm, setAssignmentForm] = useState(false);
+  const [staffForm, setStaffForm] = useState(false);
+  const [staffFullName, setStaffFullName] = useState("");
+  const [staffEmail, setStaffEmail] = useState("");
+  const [staffMobile, setStaffMobile] = useState("");
+  const [staffPassword, setStaffPassword] = useState("");
+  const [staffRole, setStaffRole] = useState("photographer");
 
   const [customerName, setCustomerName] = useState("");
   const [customerMobile, setCustomerMobile] = useState("");
@@ -533,6 +539,55 @@ export function AdminDashboard() {
     setSaving(false);
   }
 
+  async function createStaffAccount(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError("");
+    if (!staffFullName.trim() || !staffEmail.trim() || staffPassword.length < 10) {
+      setError("Enter the staff member's name, email and a temporary password of at least 10 characters.");
+      return;
+    }
+
+    setSaving(true);
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !sessionData.session?.access_token) {
+      setError("Your session expired. Please sign in again.");
+      setSaving(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/admin/staff", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${sessionData.session.access_token}`,
+        },
+        body: JSON.stringify({
+          fullName: staffFullName.trim(),
+          email: staffEmail.trim(),
+          mobile: staffMobile.trim(),
+          password: staffPassword,
+          role: staffRole,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        setError(result.error || "Staff account could not be created.");
+      } else {
+        setStaffForm(false);
+        setStaffFullName("");
+        setStaffEmail("");
+        setStaffMobile("");
+        setStaffPassword("");
+        setStaffRole("photographer");
+        await loadData();
+      }
+    } catch {
+      setError("Unable to reach the staff account service. Please try again.");
+    }
+    setSaving(false);
+  }
+
   async function saveAssignment(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
@@ -771,13 +826,18 @@ export function AdminDashboard() {
                 </button>
               )}
               {active === "Team & assignments" && (
-                <button
-                  className={buttonClass}
-                  onClick={() => setAssignmentForm(true)}
-                  disabled={!events.length || !profiles.length}
-                >
-                  + Assign Staff
-                </button>
+                <>
+                  <button className={buttonClass} onClick={() => setStaffForm(true)}>
+                    + Add Staff Account
+                  </button>
+                  <button
+                    className={buttonClass}
+                    onClick={() => setAssignmentForm(true)}
+                    disabled={!events.length || !profiles.length}
+                  >
+                    + Assign Staff
+                  </button>
+                </>
               )}
               <button
                 className="border border-[#d8d1c6] px-4 py-3 text-xs"
@@ -1426,6 +1486,38 @@ export function AdminDashboard() {
         </Modal>
       )}
 
+      {staffForm && (
+        <Modal title="Create Staff Account" onClose={() => setStaffForm(false)}>
+          <form onSubmit={createStaffAccount} className="space-y-3">
+            <Field label="Full name *">
+              <input required className={inputClass} value={staffFullName} onChange={(e) => setStaffFullName(e.target.value)} />
+            </Field>
+            <Field label="Email address *">
+              <input required type="email" className={inputClass} value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} />
+            </Field>
+            <Field label="Mobile number">
+              <input className={inputClass} value={staffMobile} onChange={(e) => setStaffMobile(e.target.value)} />
+            </Field>
+            <Field label="Role *">
+              <select className={inputClass} value={staffRole} onChange={(e) => setStaffRole(e.target.value)}>
+                <option value="photographer">Photographer</option>
+                <option value="videographer">Videographer</option>
+                <option value="editor">Editor</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Admin</option>
+              </select>
+            </Field>
+            <Field label="Temporary password * (minimum 10 characters)">
+              <input required type="password" minLength={10} autoComplete="new-password" className={inputClass} value={staffPassword} onChange={(e) => setStaffPassword(e.target.value)} />
+            </Field>
+            <p className="text-xs leading-5 text-[#827c72]">
+              Share the temporary password with the staff member securely. Do not reuse your own password.
+            </p>
+            <button disabled={saving} className={`${buttonClass} w-full`}>{saving ? "Creating account..." : "Create Staff Account"}</button>
+          </form>
+        </Modal>
+      )}
+
       {assignmentForm && (
         <Modal title="Assign Staff to Event" onClose={() => setAssignmentForm(false)}>
           <form onSubmit={saveAssignment} className="space-y-3">
@@ -1438,7 +1530,7 @@ export function AdminDashboard() {
             <Field label="Staff member *">
               <select required className={inputClass} value={assignmentStaff} onChange={(e) => setAssignmentStaff(e.target.value)}>
                 <option value="">Choose staff</option>
-                {profiles.filter((p) => ["owner", "admin", "photographer", "editor"].includes(p.role)).map((p) => <option key={p.id} value={p.id}>{p.full_name} — {p.role}</option>)}
+                {profiles.filter((p) => ["owner", "admin", "photographer", "videographer", "editor", "manager"].includes(p.role)).map((p) => <option key={p.id} value={p.id}>{p.full_name} — {p.role}</option>)}
               </select>
             </Field>
             <Field label="Assignment role">
