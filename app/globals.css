@@ -696,3 +696,169 @@
   text-shadow: 0 1px 5px rgb(0 0 0 / 0.75);
   pointer-events: none;
 }
+
+
+/* ================================================================== */
+/*  Mobile refinement — small screens                                   */
+/* ================================================================== */
+
+@media (max-width: 767px) {
+  :root {
+    --gutter: 1.125rem;
+    --col-gap: 0.75rem;
+  }
+
+  body {
+    font-size: 0.9375rem;
+    line-height: 1.65;
+  }
+
+  /* Keep the two-line wordmark inside narrow phone screens. */
+  [data-hero-title] {
+    font-size: clamp(3.05rem, 14.8vw, 6.75rem);
+    line-height: 0.88;
+    letter-spacing: -0.045em;
+    overflow-wrap: anywhere;
+  }
+
+  [data-hero-title] > span:last-child {
+    padding-left: 5vw;
+  }
+
+  /* Give the hero enough room for the title, intro and horizontal category links. */
+  section[aria-label="Introduction"] {
+    min-height: max(680px, 100svh);
+  }
+
+  section[aria-label="Introduction"] [data-hero-content] {
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+
+  section[aria-label="Introduction"] [data-hero-content] > div {
+    column-gap: 0.75rem;
+    row-gap: 1.25rem;
+  }
+
+  section[aria-label="Introduction"] [data-hero-content] > div > p {
+    font-size: clamp(1.5rem, 7vw, 2.25rem);
+  }
+
+  /* The mobile filter strip remains horizontally scrollable and easy to tap. */
+  .gallery-theme .sticky {
+    top: 0;
+  }
+
+  .gallery-theme [role="group"][aria-label="Filter by event type"] button {
+    min-height: 3.25rem;
+    padding-top: 0.9rem;
+    padding-bottom: 0.9rem;
+  }
+
+  .gallery-theme [data-layout="all"],
+  .gallery-theme [data-layout="baby-showers"],
+  .gallery-theme [data-layout="corporate"] {
+    column-gap: 0.75rem;
+    row-gap: 2.25rem;
+  }
+
+  .gallery-theme .g-caption {
+    gap: 0.3rem 0.5rem;
+    padding-top: 0.65rem;
+  }
+
+  .gallery-theme .g-title {
+    font-size: 1.125rem;
+    line-height: 1.15;
+  }
+
+  .gallery-theme .g-meta {
+    margin-left: 0;
+    flex-basis: 100%;
+    font-size: 0.625rem;
+    letter-spacing: 0.1em;
+  }
+
+  .gallery-theme [data-layout="weddings"] .g-caption {
+    padding-top: 0.8rem;
+  }
+
+  .gallery-theme [data-layout="weddings"] .g-title {
+    font-size: 1.25rem;
+  }
+
+  .gallery-theme [data-layout="parties"] .g-frame {
+    height: min(54svh, 27rem);
+    max-width: 82vw;
+  }
+
+  .gallery-theme [data-layout="birthdays"] {
+    grid-auto-rows: 43vw;
+    gap: 0.625rem;
+  }
+
+  .gallery-theme [data-layout="birthdays"] [data-variant="polaroid"] .g-figure {
+    padding: 0.4rem 0.4rem 2.15rem;
+  }
+
+  .gallery-theme [data-layout="birthdays"] [data-variant="polaroid"] .g-title {
+    font-size: 0.9rem;
+  }
+
+  /* Improve touch targets without changing the desktop navigation. */
+  .site-header button {
+    min-width: 3rem;
+    min-height: 2.75rem;
+  }
+
+  #mobile-menu {
+    padding-top: max(7rem, calc(env(safe-area-inset-top) + 5.5rem));
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+
+  #mobile-menu a {
+    display: inline-block;
+    padding-block: 0.12em;
+  }
+
+  /* Keep the contact call-to-action comfortable to tap on phones. */
+  #contact a[href^="https://wa.me/"] {
+    min-width: 9rem;
+    min-height: 9rem;
+  }
+
+  /* The oversized footer wordmark should never create horizontal scrolling. */
+  footer .text-mega {
+    font-size: clamp(3.25rem, 15.5vw, 7rem);
+    letter-spacing: -0.045em;
+  }
+
+  footer .container-x:last-child {
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 380px) {
+  [data-hero-title] {
+    font-size: clamp(2.75rem, 14.2vw, 3.5rem);
+  }
+
+  .gallery-theme .g-title {
+    font-size: 1rem;
+  }
+
+  .gallery-theme .g-meta {
+    font-size: 0.575rem;
+  }
+}
+
+/* Avoid hover-only effects on touch devices. */
+@media (hover: none) and (pointer: coarse) {
+  .g-frame:hover .g-media,
+  .g-frame:focus-visible .g-media {
+    transform: none;
+  }
+
+  .u-link::after {
+    transition-duration: 0.25s;
+  }
+}
